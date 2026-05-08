@@ -26,6 +26,18 @@ export default function AdminLayout() {
             <Users className="mr-3 h-5 w-5" />
             Manajemen Warga
           </Link>
+          <Link to="/admin/keuangan" className="flex items-center px-3 py-2 text-sm font-medium rounded-lg hover:bg-navy-800 text-slate-300 hover:text-white transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" className="mr-3 h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+            Keuangan & Iuran
+          </Link>
+          <Link to="/admin/surat" className="flex items-center px-3 py-2 text-sm font-medium rounded-lg hover:bg-navy-800 text-slate-300 hover:text-white transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" className="mr-3 h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Persuratan
+          </Link>
+          <Link to="/admin/aduan" className="flex items-center px-3 py-2 text-sm font-medium rounded-lg hover:bg-navy-800 text-slate-300 hover:text-white transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" className="mr-3 h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+            Laporan & Aduan
+          </Link>
           <Link to="/admin/buku-tamu" className="flex items-center px-3 py-2 text-sm font-medium rounded-lg hover:bg-navy-800 text-slate-300 hover:text-white transition-colors">
             <BookOpen className="mr-3 h-5 w-5" />
             Buku Tamu

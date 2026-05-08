@@ -18,19 +18,12 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      // Cek apakah .env belum diatur (masih kosong/placeholder)
-      const isSupabaseConfigured = import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_URL !== 'your_supabase_project_url';
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-      if (isSupabaseConfigured) {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
-      } else {
-        // Simulasi delay loading untuk testing UI
-        await new Promise(resolve => setTimeout(resolve, 800));
-      }
+      if (error) throw error;
 
       // Dummy logic to route based on email (for demo purposes)
       if (email.includes('admin')) {
