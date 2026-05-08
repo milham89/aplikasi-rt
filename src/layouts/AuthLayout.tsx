@@ -3,10 +3,10 @@ import { ShieldCheck } from 'lucide-react';
 
 export default function AuthLayout() {
   return (
-    <div className="min-h-screen flex bg-slate-50">
+    <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
       {/* Left Side - Visual Presentation */}
       <div className="hidden lg:flex lg:w-1/2 bg-mesh-gradient relative overflow-hidden items-center justify-center p-12">
-        <div className="absolute inset-0 bg-navy-950/20 mix-blend-multiply"></div>
+        <div className="absolute inset-0 bg-slate-950/20 dark:bg-slate-950/50 mix-blend-multiply"></div>
         <div className="relative z-10 text-white max-w-lg animate-fade-in">
           <div className="flex items-center gap-3 mb-6">
             <div className="p-3 bg-emerald-500/20 rounded-2xl backdrop-blur-sm border border-emerald-500/30">
@@ -23,9 +23,9 @@ export default function AuthLayout() {
           
           <div className="mt-12 flex items-center gap-4 text-sm text-slate-400">
             <div className="flex -space-x-3">
-              <img className="w-10 h-10 rounded-full border-2 border-navy-900" src="https://i.pravatar.cc/100?img=1" alt="User" />
-              <img className="w-10 h-10 rounded-full border-2 border-navy-900" src="https://i.pravatar.cc/100?img=2" alt="User" />
-              <img className="w-10 h-10 rounded-full border-2 border-navy-900" src="https://i.pravatar.cc/100?img=3" alt="User" />
+              <img className="w-10 h-10 rounded-full border-2 border-slate-900" src="https://i.pravatar.cc/100?img=1" alt="User" />
+              <img className="w-10 h-10 rounded-full border-2 border-slate-900" src="https://i.pravatar.cc/100?img=2" alt="User" />
+              <img className="w-10 h-10 rounded-full border-2 border-slate-900" src="https://i.pravatar.cc/100?img=3" alt="User" />
             </div>
             <p>Bergabung dengan 100+ warga lainnya</p>
           </div>
@@ -37,13 +37,13 @@ export default function AuthLayout() {
         <div className="mx-auto w-full max-w-sm lg:w-96 animate-fade-in stagger-1">
           <div className="lg:hidden flex items-center gap-2 mb-8 justify-center">
             <ShieldCheck className="h-8 w-8 text-emerald-500" />
-            <h2 className="text-2xl font-bold text-navy-900">Digital RT</h2>
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Digital RT</h2>
           </div>
           
-          <h2 className="mt-2 text-3xl font-bold tracking-tight text-navy-900">
+          <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
             Selamat Datang
           </h2>
-          <p className="mt-2 text-sm text-slate-500 mb-8">
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 mb-8">
             Silakan masukkan kredensial Anda untuk mengakses portal warga.
           </p>
 

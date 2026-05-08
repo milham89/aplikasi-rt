@@ -47,7 +47,7 @@ export default function LoginPage() {
       )}
       
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
           Email / NIK
         </label>
         <Input
@@ -60,7 +60,7 @@ export default function LoginPage() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
           Password
         </label>
         <Input
