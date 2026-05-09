@@ -140,7 +140,7 @@ export default function LoginPage() {
 
         <div className="pt-4 text-center">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-            Kesulitan Masuk? <a href="#" className="text-emerald-500 hover:underline">Hubungi Pengurus RT</a>
+            Kesulitan Masuk? <a href="https://wa.me/628998952052" target="_blank" rel="noopener noreferrer" className="text-emerald-500 hover:underline">Hubungi Admin</a>
           </p>
         </div>
       </form>
