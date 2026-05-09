@@ -23,7 +23,7 @@ export default function LoginPage() {
         const { data: userData, error: userError } = await supabase
           .from('residents')
           .select('email, role')
-          .or(`nik.eq."${identifier}",username.eq."${identifier}"`)
+          .or(`nik.eq.${identifier},username.eq.${identifier}`)
           .maybeSingle();
 
         if (userError || !userData?.email) {
