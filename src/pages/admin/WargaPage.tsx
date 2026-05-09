@@ -72,7 +72,7 @@ export default function WargaPage() {
     setFormData({ 
       no_kk: '', address: '', block_number: '', 
       nik: '', full_name: '', gender: 'Laki-laki', phone_number: '', 
-      role: 'warga', status: 'Aktif', family_relation: 'Kepala Keluarga'
+      role: 'warga', status: 'Aktif', family_relation: 'Kepala Keluarga', username: ''
     });
     setIsModalOpen(true);
   };
@@ -90,7 +90,8 @@ export default function WargaPage() {
       phone_number: warga.phone_number || '',
       role: warga.role || 'warga',
       status: warga.status || 'Aktif',
-      family_relation: warga.family_relation || 'Kepala Keluarga'
+      family_relation: warga.family_relation || 'Kepala Keluarga',
+      username: warga.username || ''
     });
     setIsModalOpen(true);
   };
@@ -140,7 +141,8 @@ export default function WargaPage() {
             phone_number: formData.phone_number,
             role: formData.role,
             status: formData.status,
-            family_relation: formData.family_relation
+            family_relation: formData.family_relation,
+            username: formData.username
           })
           .eq('id', editingId);
 
@@ -158,7 +160,8 @@ export default function WargaPage() {
             phone_number: formData.phone_number,
             role: formData.role,
             status: formData.status,
-            family_relation: formData.family_relation
+            family_relation: formData.family_relation,
+            username: formData.username
           }]);
 
         if (resError) throw resError;
@@ -250,6 +253,10 @@ export default function WargaPage() {
                       <input required name="nik" value={formData.nik} onChange={handleInputChange} type="text" className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl focus:ring-2 focus:ring-emerald-500 text-sm font-bold text-slate-900 dark:text-white transition-all shadow-inner font-mono" placeholder="320..." />
                     </div>
                     <div className="space-y-2">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Username</label>
+                      <input name="username" value={formData.username} onChange={handleInputChange} type="text" className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl focus:ring-2 focus:ring-emerald-500 text-sm font-bold text-slate-900 dark:text-white transition-all shadow-inner" placeholder="Username" />
+                    </div>
+                    <div className="space-y-2">
                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Jenis Kelamin</label>
                       <select name="gender" value={formData.gender} onChange={handleInputChange} className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl focus:ring-2 focus:ring-emerald-500 text-sm font-bold text-slate-900 dark:text-white transition-all shadow-inner">
                         <option value="Laki-laki">Laki-laki</option>
@@ -302,7 +309,6 @@ export default function WargaPage() {
                 <th className="px-6 py-4">NIK</th>
                 <th className="px-6 py-4">Email</th>
                 <th className="px-6 py-4">Username</th>
-                <th className="px-6 py-4">Blok / Rumah</th>
                 <th className="px-6 py-4">Peran</th>
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4 text-right rounded-tr-lg">Aksi</th>
@@ -343,7 +349,6 @@ export default function WargaPage() {
                     </td>
                     <td className="px-6 py-4 text-slate-500 text-xs font-bold">{warga.email || '-'}</td>
                     <td className="px-6 py-4 text-emerald-600 text-xs font-black">@{warga.username || 'user'}</td>
-                    <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{warga.families?.block_number || '-'}</td>
                     <td className="px-6 py-4">
                       <span className="text-slate-600 dark:text-slate-400">{warga.role === 'admin_rt' ? 'Pengurus RT' : 'Warga'}</span>
                     </td>
