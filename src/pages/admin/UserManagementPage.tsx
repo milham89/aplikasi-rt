@@ -348,15 +348,24 @@ export default function UserManagementPage() {
                           <span className="text-[9px] font-black uppercase tracking-tighter">SIAP LOGIN</span>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1.5 text-slate-400 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-full w-fit border border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-1.5 text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 rounded-full w-fit border border-amber-500/20">
                           <Clock className="h-3 w-3" />
-                          <span className="text-[9px] font-black uppercase tracking-tighter">BELUM DAFTAR</span>
+                          <span className="text-[9px] font-black uppercase tracking-tighter">BELUM AKTIF</span>
                         </div>
                       )}
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2">
+                      {!user?.user_id && (
+                        <button 
+                          onClick={() => openEditModal(user)} 
+                          className="p-2.5 bg-amber-500 text-white rounded-xl transition-all hover:scale-110 shadow-lg shadow-amber-500/20" 
+                          title="Aktivasi Akun Sekarang"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                      )}
                       <button onClick={() => openEditModal(user)} className="p-2.5 bg-blue-50 text-blue-600 dark:bg-blue-900/20 rounded-xl transition-all hover:scale-110" title="Edit User">
                         <Edit2 className="h-4 w-4" />
                       </button>

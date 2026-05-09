@@ -48,14 +48,18 @@ export default function LoginPage() {
         throw signInError;
       }
 
-      // 3. Smart Routing
-      const { data: resident } = await supabase
+      // 3. Smart Routing & Sync Check
+      const { data: resident, error: residentError } = await supabase
         .from('residents')
-        .select('role')
+        .select('role, full_name')
         .eq('email', loginEmail)
         .maybeSingle();
 
-      if (resident?.role === 'admin' || loginEmail.includes('admin')) {
+      if (residentError || !resident) {
+        throw new Error('Akun terdaftar di sistem login, tapi data profil warga tidak ditemukan. Hubungi Admin.');
+      }
+
+      if (resident.role === 'admin' || loginEmail.includes('admin')) {
         navigate('/admin');
       } else {
         navigate('/warga');
