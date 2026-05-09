@@ -28,20 +28,9 @@ export default function AuthLayout() {
           </h2>
           
           <p className="text-xl text-emerald-50/80 leading-relaxed font-medium max-w-xl">
-            Sistem tata kelola RT masa kini. Mandiri, transparan, dan terintegrasi penuh untuk kenyamanan seluruh warga.
+            Portal Layanan Mandiri Warga Digital. Solusi administrasi lingkungan yang transparan, efisien, dan terintegrasi untuk kemajuan bersama.
           </p>
           
-          <div className="mt-16 flex items-center gap-6">
-            <div className="flex -space-x-4">
-              {[1, 2, 3, 4].map(i => (
-                <img key={i} className="w-12 h-12 rounded-full border-4 border-emerald-500 shadow-xl" src={`https://i.pravatar.cc/100?img=${i+10}`} alt="User" />
-              ))}
-            </div>
-            <div>
-              <p className="text-lg font-black tracking-tight">150+ Warga Terdaftar</p>
-              <p className="text-xs font-bold text-emerald-200/60 uppercase tracking-widest">Bergabung sekarang juga</p>
-            </div>
-          </div>
         </div>
       </div>
 
