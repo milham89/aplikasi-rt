@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card } from '../../components/ui/Card';
 import { supabase } from '../../lib/supabase';
-import { Search, Plus, X, Loader2, Save, Edit2, Trash2, Key, User, Mail, Hash, Shield, ChevronRight, ChevronLeft, Check, Clock, PhoneCall, Briefcase, Camera } from 'lucide-react';
+import { Search, Plus, X, Loader2, Save, Edit2, Trash2, Key, User, Mail, Hash, Shield, ChevronRight, ChevronLeft, Check, Clock, PhoneCall, Briefcase, Camera, AlertCircle } from 'lucide-react';
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState<any[]>([]);
@@ -525,10 +525,26 @@ export default function UserManagementPage() {
                       </select>
                     </div>
                   </div>
-                  <InputGroup icon={<Mail />} label="Email Login" type="email" required={!isEditMode} value={formData.email} onChange={(v) => setFormData({...formData, email: v})} placeholder="alamat@email.com" />
+                  <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-2xl border border-amber-100 dark:border-amber-900/30 flex gap-3 mb-2">
+                    <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
+                    <div className="text-[10px] font-bold text-amber-700 dark:text-amber-400 leading-relaxed uppercase tracking-tight">
+                      Penting: Mengubah Email atau Password di sini hanya mengubah profil warga. Akun login utama tetap menggunakan Email saat akun dibuat.
+                    </div>
+                  </div>
+
+                  <InputGroup 
+                    icon={<Mail />} 
+                    label={isEditMode ? "Email Login (Terkunci)" : "Email Login"} 
+                    type="email" 
+                    required={!isEditMode} 
+                    disabled={isEditMode}
+                    value={formData.email} 
+                    onChange={(v) => setFormData({...formData, email: v})} 
+                    placeholder="alamat@email.com" 
+                  />
                   <InputGroup 
                     icon={<Key />} 
-                    label={isEditMode ? "Ganti Password (Kosongkan jika tidak diubah)" : "Password Awal"} 
+                    label={isEditMode ? "Ganti Password (Profil)" : "Password Awal"} 
                     type="password" 
                     required={!isEditMode} 
                     value={formData.password} 
@@ -553,13 +569,21 @@ export default function UserManagementPage() {
   );
 }
 
-function InputGroup({ icon, label, value, onChange, placeholder, type = "text", required = true }: any) {
+function InputGroup({ icon, label, value, onChange, placeholder, type = "text", required = true, disabled = false }: any) {
   return (
-    <div>
+    <div className={disabled ? "opacity-60" : ""}>
       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{label}</label>
       <div className="relative flex items-center group">
         <div className="absolute left-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors">{icon}</div>
-        <input required={required} type={type} value={value} onChange={(e) => onChange(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-800 dark:text-white border-none focus:ring-2 focus:ring-emerald-500 shadow-inner" placeholder={placeholder} />
+        <input 
+          required={required} 
+          type={type} 
+          disabled={disabled}
+          value={value} 
+          onChange={(e) => onChange(e.target.value)} 
+          className={`w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-800 dark:text-white border-none focus:ring-2 focus:ring-emerald-500 shadow-inner ${disabled ? "cursor-not-allowed" : ""}`} 
+          placeholder={placeholder} 
+        />
       </div>
     </div>
   );
