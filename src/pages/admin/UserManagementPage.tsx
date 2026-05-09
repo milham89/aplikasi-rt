@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card } from '../../components/ui/Card';
 import { supabase } from '../../lib/supabase';
-import { Search, Plus, X, Loader2, Save, Edit2, Trash2, Key, User, Mail, Hash, Shield, ChevronRight, ChevronLeft, Check, Clock, PhoneCall, Briefcase, Camera, AlertCircle } from 'lucide-react';
+import { Search, Plus, X, Loader2, Save, Edit2, Trash2, Key, User, Mail, Hash, Shield, PhoneCall, Briefcase, Camera, AlertCircle, Check, Clock } from 'lucide-react';
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState<any[]>([]);
@@ -13,7 +13,6 @@ export default function UserManagementPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [currentStep, setCurrentStep] = useState(1);
   
   const [formData, setFormData] = useState({
     full_name: '',
@@ -44,7 +43,7 @@ export default function UserManagementPage() {
         .order('full_name', { ascending: true });
       if (error) {
         console.error("Fetch Users Error:", error);
-        setUsers([]); // Reset data agar tidak crash
+        setUsers([]);
         return;
       }
       setUsers(data || []);
@@ -63,7 +62,6 @@ export default function UserManagementPage() {
   const openAddModal = () => {
     setIsEditMode(false);
     setSelectedId(null);
-    setCurrentStep(1);
     setFormData({
       full_name: '',
       nik: '',
@@ -84,7 +82,6 @@ export default function UserManagementPage() {
   const openEditModal = (user: any) => {
     setIsEditMode(true);
     setSelectedId(user.id);
-    setCurrentStep(1);
     setFormData({
       full_name: user.full_name || '',
       nik: user.nik || '',
@@ -108,7 +105,6 @@ export default function UserManagementPage() {
       const file = e.target.files[0];
       if (!file) return;
 
-      // Limit to 500KB
       if (file.size > 500 * 1024) {
         alert("Ukuran foto terlalu besar (Maksimal 500KB).");
         return;
@@ -166,9 +162,6 @@ export default function UserManagementPage() {
     }
   };
 
-  const nextStep = () => setCurrentStep(prev => prev + 1);
-  const prevStep = () => setCurrentStep(prev => prev - 1);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(isEditMode ? 'editing' : 'adding');
@@ -187,28 +180,32 @@ export default function UserManagementPage() {
       };
 
       if (isEditMode && selectedId) {
-        // Logika Update: Cek apakah admin mengganti password
-        if (formData.password) {
-          // Update password via API (butuh admin privileges atau re-auth, biasanya disarankan via admin panel)
-          // Untuk demo ini, kita asumsikan update profil residents saja jika password kosong
+        // Logika Aktivasi: Gunakan RPC agar sinkron dengan database residents
+        const currentUser = users.find(u => u.id === selectedId);
+        if (currentUser && !currentUser.user_id && formData.password) {
+          const { data, error: rpcError } = await supabase.rpc('admin_activate_resident', {
+            target_resident_id: selectedId,
+            target_email: formData.email,
+            target_password: formData.password
+          });
+
+          if (rpcError) throw rpcError;
+          if (data && data.success) {
+            alert("Akun berhasil diaktivasi dan disinkronkan ke database!");
+          } else {
+            throw new Error(data?.message || "Gagal mengaktivasi akun");
+          }
+        } else {
+          // Update profil biasa
+          const { error: updateError } = await supabase
+            .from('residents')
+            .update(payload)
+            .eq('id', selectedId);
+          if (updateError) throw updateError;
+          alert("Profil warga berhasil diperbarui!");
         }
-
-        const { error } = await supabase
-          .from('residents')
-          .update(payload)
-          .eq('id', selectedId);
-        if (error) throw error;
-        
-        alert("Profil warga berhasil diperbarui!");
       } else if (!isEditMode) {
-        // 1. Cek apakah warga dengan NIK ini sudah ada di database (tapi belum punya user_id)
-        const { data: existingResident } = await supabase
-          .from('residents')
-          .select('id, user_id')
-          .eq('nik', formData.nik)
-          .maybeSingle();
-
-        // 2. Buat akun Auth baru
+        // Buat akun Auth baru untuk warga baru
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: formData.email,
           password: formData.password
@@ -217,27 +214,12 @@ export default function UserManagementPage() {
         if (authError) throw authError;
 
         if (authData.user) {
-          if (existingResident) {
-            // Jika warga sudah ada, SINKRONKAN (Update user_id pada record yang sudah ada)
-            const { error: syncError } = await supabase
-              .from('residents')
-              .update({
-                ...payload,
-                user_id: authData.user.id
-              })
-              .eq('id', existingResident.id);
-            
-            if (syncError) throw syncError;
-            alert("Berhasil menghubungkan akun login ke data warga yang sudah ada!");
-          } else {
-            // Jika warga benar-benar baru, INSERT baru
-            const { error: resError } = await supabase.from('residents').insert([{
-              ...payload,
-              user_id: authData.user.id,
-            }]);
-            if (resError) throw resError;
-            alert("Berhasil membuat data warga dan akun login baru!");
-          }
+          const { error: resError } = await supabase.from('residents').insert([{
+            ...payload,
+            user_id: authData.user.id,
+          }]);
+          if (resError) throw resError;
+          alert("Berhasil membuat data warga dan akun login baru!");
         }
       }
       setIsModalOpen(false);
@@ -381,12 +363,10 @@ export default function UserManagementPage() {
         </div>
       </Card>
 
-      {/* MODAL STEPPER: KEMBALI KE TENGAH DENGAN POSISI SEMPURNA */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4">
           <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
             
-            {/* Header Modal */}
             <div className="p-8 border-b dark:border-slate-800 flex justify-between items-center">
               <div>
                 <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
@@ -442,7 +422,6 @@ export default function UserManagementPage() {
                 </div>
               )}
               <form onSubmit={handleSubmit} className="space-y-8">
-                {/* Section 1: Domisili */}
                 <div className="space-y-4">
                   <h4 className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
                     <span className="h-2 w-2 rounded-full bg-emerald-500"></span> 1. Data Domisili
@@ -470,7 +449,6 @@ export default function UserManagementPage() {
                   </div>
                 </div>
 
-                {/* Section 2: Identitas */}
                 <div className="space-y-4">
                   <h4 className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
                     <span className="h-2 w-2 rounded-full bg-emerald-500"></span> 2. Identitas & Kontak
@@ -503,7 +481,6 @@ export default function UserManagementPage() {
                   </div>
                 </div>
 
-                {/* Section 3: Akses Akun */}
                 <div className="space-y-4">
                   <h4 className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
                     <span className="h-2 w-2 rounded-full bg-emerald-500"></span> 3. Akses Login & Role
@@ -537,36 +514,35 @@ export default function UserManagementPage() {
                   <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-2xl border border-amber-100 dark:border-amber-900/30 flex gap-3 mb-2">
                     <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
                     <div className="text-[10px] font-bold text-amber-700 dark:text-amber-400 leading-relaxed uppercase tracking-tight">
-                      Penting: Mengubah Email atau Password di sini hanya mengubah profil warga. Akun login utama tetap menggunakan Email saat akun dibuat.
+                      Penting: Aktivasi akun memerlukan email dan password. Data ini digunakan warga untuk login ke portal.
                     </div>
                   </div>
 
                   <InputGroup 
                     icon={<Mail />} 
-                    label={isEditMode ? "Email Login (Terkunci)" : "Email Login"} 
+                    label={(isEditMode && users.find(u => u.id === selectedId)?.user_id) ? "Email Login (Terkunci)" : "Email Login"} 
                     type="email" 
-                    required={!isEditMode} 
-                    disabled={isEditMode}
+                    required={true} 
+                    disabled={isEditMode && !!users.find(u => u.id === selectedId)?.user_id}
                     value={formData.email} 
                     onChange={(v) => setFormData({...formData, email: v})} 
                     placeholder="alamat@email.com" 
                   />
                   <InputGroup 
                     icon={<Key />} 
-                    label={isEditMode ? "Ganti Password (Profil)" : "Password Awal"} 
+                    label={(isEditMode && !users.find(u => u.id === selectedId)?.user_id) ? "Password Aktivasi" : (isEditMode ? "Password (Kosongkan)" : "Password Awal")} 
                     type="password" 
-                    required={!isEditMode} 
+                    required={!isEditMode || (isEditMode && !users.find(u => u.id === selectedId)?.user_id)} 
                     value={formData.password} 
                     onChange={(v) => setFormData({...formData, password: v})} 
-                    placeholder={isEditMode ? "••••••" : "Min. 6 karakter"} 
+                    placeholder="Min. 6 karakter" 
                   />
                 </div>
 
-                {/* Footer Action */}
                 <div className="pt-4">
                   <button type="submit" disabled={!!isSaving} className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl shadow-xl shadow-emerald-600/20 flex items-center justify-center gap-3 hover:bg-emerald-700 transition-all active:scale-[0.98]">
                     {isSaving ? <Loader2 className="h-6 w-6 animate-spin" /> : <Save className="h-6 w-6" />}
-                    {isEditMode ? 'PERBARUI DATA USER' : 'SIMPAN USER BARU'}
+                    {(isEditMode && !users.find(u => u.id === selectedId)?.user_id) ? 'AKTIVASI AKUN SEKARANG' : (isEditMode ? 'PERBARUI DATA USER' : 'SIMPAN USER BARU')}
                   </button>
                 </div>
               </form>
