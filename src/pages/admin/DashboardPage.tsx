@@ -24,13 +24,13 @@ export default function DashboardPage() {
       
       // Fetch Surat Menunggu
       const { count: suratCount } = await supabase
-        .from('letters')
+        .from('surat_warga')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'requested');
 
       // Fetch Aduan Aktif
       const { count: aduanCount } = await supabase
-        .from('complaints')
+        .from('resident_complaints')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'open');
 

@@ -137,6 +137,21 @@ export default function UserManagementPage() {
     }
   };
 
+  const handleDeleteUser = async (id: string) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus user ini? Semua data terkait (surat, aduan, dll) mungkin juga akan terhapus.")) return;
+    try {
+      const { error } = await supabase
+        .from('residents')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      alert("User berhasil dihapus!");
+      fetchUsers();
+    } catch (error: any) {
+      alert("Gagal menghapus user: " + error.message);
+    }
+  };
+
   const filteredUsers = users.filter(user => 
     user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
     user.nik?.includes(searchTerm)
@@ -193,9 +208,14 @@ export default function UserManagementPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button onClick={() => openEditModal(user)} className="p-2.5 bg-blue-50 text-blue-600 dark:bg-blue-900/20 rounded-xl transition-all hover:scale-110">
-                      <Edit2 className="h-4 w-4" />
-                    </button>
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => openEditModal(user)} className="p-2.5 bg-blue-50 text-blue-600 dark:bg-blue-900/20 rounded-xl transition-all hover:scale-110" title="Edit User">
+                        <Edit2 className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => handleDeleteUser(user.id)} className="p-2.5 bg-rose-50 text-rose-600 dark:bg-rose-900/20 rounded-xl transition-all hover:scale-110" title="Hapus User">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

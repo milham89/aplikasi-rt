@@ -10,6 +10,7 @@ export default function WargaPage() {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     no_kk: '', address: '', block_number: '', // Data KK
     nik: '', full_name: '', gender: 'Laki-laki', phone_number: '', role: 'warga', status: 'Aktif', family_relation: 'Kepala Keluarga' // Data Warga
@@ -32,14 +33,11 @@ export default function WargaPage() {
         
       if (error) throw error;
       
-      // Sort logic: Kepala Keluarga > Istri > Anak > Others
       const sortedData = (data || []).sort((a, b) => {
-        // First sort by Family (to group them together)
         const kkA = a.families?.no_kk || '';
         const kkB = b.families?.no_kk || '';
         if (kkA !== kkB) return kkA.localeCompare(kkB);
 
-        // Then sort by Relation within the family
         const priority: any = {
           'Kepala Keluarga': 1,
           'Istri': 2,
@@ -69,6 +67,34 @@ export default function WargaPage() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const openAddModal = () => {
+    setEditingId(null);
+    setFormData({ 
+      no_kk: '', address: '', block_number: '', 
+      nik: '', full_name: '', gender: 'Laki-laki', phone_number: '', 
+      role: 'warga', status: 'Aktif', family_relation: 'Kepala Keluarga'
+    });
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (warga: any) => {
+    const revGenderMap: any = { 'L': 'Laki-laki', 'P': 'Perempuan' };
+    setEditingId(warga.id);
+    setFormData({
+      no_kk: warga.families?.no_kk || '',
+      address: warga.families?.address || '',
+      block_number: warga.families?.block_number || '',
+      nik: warga.nik || '',
+      full_name: warga.full_name || '',
+      gender: revGenderMap[warga.gender] || 'Laki-laki',
+      phone_number: warga.phone_number || '',
+      role: warga.role || 'warga',
+      status: warga.status || 'Aktif',
+      family_relation: warga.family_relation || 'Kepala Keluarga'
+    });
+    setIsModalOpen(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -84,16 +110,13 @@ export default function WargaPage() {
       if (checkError) throw new Error(`Gagal mengecek data KK: ${checkError.message}`);
         
       if (existingFamily) {
-        // Jika KK sudah ada, cukup ambil ID-nya. 
-        // JANGAN UPDATE alamat/blok agar data lama tidak terhapus (karena inputnya sudah kita hapus dari form)
         familyId = existingFamily.id;
       } else {
-        // Jika KK belum ada, buat baru dengan data minimal (karena input alamat sudah dihapus)
         const { data: newFamily, error: famError } = await supabase
           .from('families')
           .insert([{ 
             no_kk: formData.no_kk,
-            address: '-', // Beri nilai default agar tidak kosong total
+            address: '-', 
             block_number: '-' 
           }])
           .select()
@@ -103,33 +126,50 @@ export default function WargaPage() {
         familyId = newFamily.id;
       }
 
-      const { error: resError } = await supabase
-        .from('residents')
-        .insert([{
-          family_id: familyId,
-          nik: formData.nik,
-          full_name: formData.full_name,
-          gender: formData.gender,
-          phone_number: formData.phone_number,
-          role: formData.role,
-          status: formData.status,
-          family_relation: formData.family_relation
-        }]);
+      const genderMap: any = { 'Laki-laki': 'L', 'Perempuan': 'P' };
 
-      if (resError) throw new Error(`Gagal menyimpan data warga: ${resError.message}`);
+      if (editingId) {
+        // UPDATE MODE
+        const { error: updateError } = await supabase
+          .from('residents')
+          .update({
+            family_id: familyId,
+            nik: formData.nik,
+            full_name: formData.full_name,
+            gender: genderMap[formData.gender] || 'L',
+            phone_number: formData.phone_number,
+            role: formData.role,
+            status: formData.status,
+            family_relation: formData.family_relation
+          })
+          .eq('id', editingId);
+
+        if (updateError) throw updateError;
+        alert("Data warga berhasil diperbarui!");
+      } else {
+        // INSERT MODE
+        const { error: resError } = await supabase
+          .from('residents')
+          .insert([{
+            family_id: familyId,
+            nik: formData.nik,
+            full_name: formData.full_name,
+            gender: genderMap[formData.gender] || 'L',
+            phone_number: formData.phone_number,
+            role: formData.role,
+            status: formData.status,
+            family_relation: formData.family_relation
+          }]);
+
+        if (resError) throw resError;
+        alert("Data warga berhasil disimpan!");
+      }
       
       setIsModalOpen(false);
-      setFormData({ 
-        no_kk: '', address: '', block_number: '', 
-        nik: '', full_name: '', gender: 'Laki-laki', phone_number: '', 
-        role: 'warga', status: 'Aktif', family_relation: 'Kepala Keluarga'
-      });
-      alert("Data warga berhasil disimpan!");
       fetchWarga();
       
     } catch (error: any) {
       alert("Error: " + error.message);
-      console.error("CRUD Error:", error);
     } finally {
       setIsSubmitting(false);
     }
@@ -155,21 +195,22 @@ export default function WargaPage() {
           <p className="text-sm text-slate-500 mt-1">Kelola data penduduk RT secara digital</p>
         </div>
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={openAddModal}
           className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2.5 rounded-xl font-medium shadow-sm transition-colors flex items-center"
         >
           <span className="mr-2 text-lg leading-none">+</span> Tambah Warga
         </button>
       </div>
       
-      {/* Modal Form Tambah Warga */}
+      {/* Modal Form Warga */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100] flex items-start justify-center p-4 sm:p-8 overflow-y-auto pt-24 sm:pt-32">
           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl w-full max-w-xl flex flex-col overflow-hidden animate-in slide-in-from-top-10 duration-500 relative border border-white/10 mb-20">
-            {/* Header: Dibuat sangat kontras dan menempel */}
             <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 z-20">
               <div>
-                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Tambah Data Warga</h3>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
+                  {editingId ? 'Edit Data Warga' : 'Tambah Data Warga'}
+                </h3>
                 <p className="text-[10px] text-emerald-500 font-black uppercase tracking-[0.2em] mt-1">Sistem Pendataan Digital RT</p>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="p-2.5 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 hover:text-rose-500 transition-all hover:rotate-90">
@@ -179,7 +220,6 @@ export default function WargaPage() {
             
             <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-8 bg-white dark:bg-slate-900">
               <div className="space-y-8 pb-4">
-                {/* Section 1: Data KK */}
                 <div className="space-y-4">
                   <h4 className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-[0.2em] flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> 1. Data Kartu Keluarga
@@ -193,7 +233,6 @@ export default function WargaPage() {
                   </div>
                 </div>
 
-                {/* Section 2: Data Individu */}
                 <div className="space-y-4">
                   <h4 className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-[0.2em] flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> 2. Data Individu
@@ -236,7 +275,7 @@ export default function WargaPage() {
                   Batal
                 </button>
                 <button type="submit" disabled={isSubmitting} className="px-10 py-4 bg-emerald-500 text-white rounded-2xl text-[10px] font-black shadow-2xl shadow-emerald-500/30 hover:bg-emerald-600 active:scale-95 transition-all">
-                  {isSubmitting ? 'MENYIMPAN...' : 'SIMPAN DATA WARGA'}
+                  {isSubmitting ? 'MENYIMPAN...' : editingId ? 'PERBARUI DATA' : 'SIMPAN DATA WARGA'}
                 </button>
               </div>
             </form>
@@ -261,6 +300,8 @@ export default function WargaPage() {
                 <th className="px-6 py-4 rounded-tl-lg">Nama Lengkap</th>
                 <th className="px-6 py-4">L/P</th>
                 <th className="px-6 py-4">NIK</th>
+                <th className="px-6 py-4">Email</th>
+                <th className="px-6 py-4">Username</th>
                 <th className="px-6 py-4">Blok / Rumah</th>
                 <th className="px-6 py-4">Peran</th>
                 <th className="px-6 py-4">Status</th>
@@ -270,7 +311,7 @@ export default function WargaPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
                     <div className="animate-pulse flex flex-col items-center">
                       <div className="h-8 w-8 bg-slate-200 rounded-full mb-3"></div>
                       <p>Memuat data warga...</p>
@@ -279,7 +320,7 @@ export default function WargaPage() {
                 </tr>
               ) : filteredWarga.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center text-slate-500">
+                  <td colSpan={7} className="px-6 py-16 text-center text-slate-500">
                     <div className="flex flex-col items-center">
                       <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-full mb-3">
                         <Users className="h-8 w-8 text-slate-400" />
@@ -294,8 +335,14 @@ export default function WargaPage() {
                 filteredWarga.map((warga) => (
                   <tr key={warga.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-emerald-50/30 dark:hover:bg-emerald-900/10 transition-colors">
                     <td className="px-6 py-4 font-medium text-slate-900 dark:text-slate-100">{warga.full_name}</td>
-                    <td className="px-6 py-4 text-slate-500 font-bold">{warga.gender}</td>
-                    <td className="px-6 py-4 text-slate-500 font-mono text-xs">{warga.nik}</td>
+                    <td className="px-6 py-4 text-slate-500 font-bold">
+                      {warga.gender === 'L' ? 'Laki-laki' : warga.gender === 'P' ? 'Perempuan' : warga.gender}
+                    </td>
+                    <td className="px-6 py-4 text-slate-500 font-mono text-xs">
+                      {warga.nik?.startsWith('G-') ? warga.nik.substring(2) : warga.nik}
+                    </td>
+                    <td className="px-6 py-4 text-slate-500 text-xs font-bold">{warga.email || '-'}</td>
+                    <td className="px-6 py-4 text-emerald-600 text-xs font-black">@{warga.username || 'user'}</td>
                     <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{warga.families?.block_number || '-'}</td>
                     <td className="px-6 py-4">
                       <span className="text-slate-600 dark:text-slate-400">{warga.role === 'admin_rt' ? 'Pengurus RT' : 'Warga'}</span>
@@ -309,12 +356,20 @@ export default function WargaPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button 
-                        onClick={() => handleDelete(warga.id)}
-                        className="text-rose-600 hover:text-rose-800 font-medium px-3 py-1 hover:bg-rose-50 rounded-lg transition-colors"
-                      >
-                        Hapus
-                      </button>
+                      <div className="flex justify-end gap-2">
+                        <button 
+                          onClick={() => openEditModal(warga)}
+                          className="text-emerald-600 hover:text-emerald-800 font-medium px-3 py-1 hover:bg-emerald-50 rounded-lg transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(warga.id)}
+                          className="text-rose-600 hover:text-rose-800 font-medium px-3 py-1 hover:bg-rose-50 rounded-lg transition-colors"
+                        >
+                          Hapus
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

@@ -27,14 +27,31 @@ export default function BukuTamuPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      // 1. Ambil data tamu saja
+      const { data: guestData, error: guestError } = await supabase
         .from('guestbooks')
-        .select('*, residents(full_name, nik)')
+        .select('*')
         .order('created_at', { ascending: false });
-      if (error) throw error;
-      setGuests(data || []);
-    } catch (error) {
-      console.error(error);
+      
+      if (guestError) throw guestError;
+
+      // 2. Ambil data warga
+      const { data: residentData, error: resError } = await supabase
+        .from('residents')
+        .select('id, full_name, nik');
+
+      if (resError) throw resError;
+
+      // 3. Mapping manual
+      const mappedData = (guestData || []).map(guest => ({
+        ...guest,
+        residents: residentData?.find(r => r.id === guest.resident_id) || null
+      }));
+
+      setGuests(mappedData);
+    } catch (error: any) {
+      console.error("Buku Tamu Fetch Error:", error);
+      alert("Gagal sinkron data buku tamu: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -157,7 +174,9 @@ export default function BukuTamuPage() {
                     </td>
                     <td className="px-8 py-5">
                       <p className="text-sm font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-tight">{guest.residents?.full_name || 'Umum'}</p>
-                      <p className="text-[10px] text-slate-400 font-bold">NIK: {guest.residents?.nik || '-'}</p>
+                      <p className="text-[10px] text-slate-400 font-bold">
+                        NIK: {guest.residents?.nik?.startsWith('G-') ? guest.residents.nik.substring(2) : guest.residents?.nik || '-'}
+                      </p>
                     </td>
                     <td className="px-8 py-5">
                       <StatusBadge status={guest.status} />

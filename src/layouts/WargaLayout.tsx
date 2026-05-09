@@ -40,19 +40,63 @@ export default function WargaLayout() {
 
   const fetchResidentData = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { navigate('/login'); return; }
+      setLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
+      
+      if (!user) {
+        navigate('/login');
+        return;
+      }
 
-      const { data, error } = await supabase
+      // 1. Coba ambil data resident berdasarkan user_id (paling akurat untuk Google Login)
+      // Jika tidak ada, coba cari berdasarkan email
+      let { data, error } = await supabase
         .from('residents')
         .select('*, families(*)')
-        .eq('email', user.email)
-        .single();
+        .or(`user_id.eq.${user.id},email.eq.${user.email}`)
+        .maybeSingle();
 
-      if (error) throw error;
+      // 2. Jika data tidak ditemukan, buat profil baru secara otomatis
+      if (!data) {
+        console.log("Mencoba membuat profil warga baru untuk:", user.email);
+        
+        const newResidentData = {
+          user_id: user.id,
+          email: user.email,
+          full_name: user.user_metadata?.full_name || user.email?.split('@')[0],
+          nik: 'G-' + Date.now().toString().slice(-8),
+          role: user.email?.includes('admin') ? 'admin_rt' : 'warga',
+          status: 'Aktif'
+        };
+
+        const { data: insertedData, error: insertError } = await supabase
+          .from('residents')
+          .insert([newResidentData])
+          .select('*, families(*)')
+          .single();
+
+        if (insertError) {
+          console.error("Gagal sinkronisasi otomatis:", insertError);
+          // Jika gagal karena kolom missing, beri peringatan ke console
+          if (insertError.message.includes('column "user_id" does not exist')) {
+            console.error("KRITIS: Kolom user_id atau email belum ada di tabel residents. Mohon jalankan skrip FIX_DATABASE_SYNC.sql");
+          }
+          throw insertError;
+        }
+        data = insertedData;
+      } else if (!data.user_id || !data.email) {
+        // 3. Jika data ada tapi user_id/email kosong (user lama), update datanya
+        await supabase
+          .from('residents')
+          .update({ user_id: user.id, email: user.email })
+          .eq('id', data.id);
+      }
+
       setResident(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching resident:', error);
+      // Fallback: Tetap izinkan masuk tapi beri peringatan data belum sinkron
     } finally {
       setLoading(false);
     }

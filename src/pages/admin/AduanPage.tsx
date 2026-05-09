@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card } from '../../components/ui/Card';
 import { supabase } from '../../lib/supabase';
-import { AlertTriangle, Clock, CheckCircle, Search, MessageSquare, ArrowUpRight, Filter } from 'lucide-react';
+import { AlertTriangle, Clock, CheckCircle, Search, MessageSquare, ArrowUpRight, Filter, Trash2 } from 'lucide-react';
 
 export default function AduanPage() {
   const [complaints, setComplaints] = useState<any[]>([]);
@@ -16,28 +16,36 @@ export default function AduanPage() {
   const fetchComplaints = async () => {
     try {
       setLoading(true);
-      // Fetch data dasar dulu untuk memastikan sinkronisasi tabel
-      const { data, error } = await supabase
+      // 1. Ambil data aduan saja
+      const { data: complaintData, error: compError } = await supabase
         .from('resident_complaints')
-        .select(`
-          *,
-          residents (
-            full_name,
-            nik
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
       
-      if (error) throw error;
+      if (compError) throw compError;
+
+      // 2. Ambil data warga
+      const { data: residentData, error: resError } = await supabase
+        .from('residents')
+        .select('id, full_name, nik');
+
+      if (resError) throw resError;
+
+      // 3. Mapping manual
+      const mappedData = (complaintData || []).map(item => ({
+        ...item,
+        residents: residentData?.find(r => r.id === item.resident_id) || null
+      }));
       
-      // Filter status di sisi client agar lebih responsif
+      // Filter status di sisi client
       if (filterStatus === 'all') {
-        setComplaints(data || []);
+        setComplaints(mappedData);
       } else {
-        setComplaints((data || []).filter(c => c.status === filterStatus));
+        setComplaints(mappedData.filter(c => c.status === filterStatus));
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Fetch error:', error);
+      alert("Gagal sinkronisasi data aduan: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -53,6 +61,21 @@ export default function AduanPage() {
       fetchComplaints();
     } catch (error: any) {
       alert(error.message);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus laporan aduan ini?")) return;
+    try {
+      const { error } = await supabase
+        .from('resident_complaints')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      alert("Laporan aduan berhasil dihapus!");
+      fetchComplaints();
+    } catch (error: any) {
+      alert("Gagal menghapus aduan: " + error.message);
     }
   };
 
@@ -131,7 +154,9 @@ export default function AduanPage() {
                     </td>
                     <td className="px-8 py-5">
                       <p className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">{item.residents?.full_name}</p>
-                      <p className="text-[10px] text-slate-500 font-bold">NIK: {item.residents?.nik}</p>
+                      <p className="text-[10px] text-slate-500 font-bold">
+                        NIK: {item.residents?.nik?.startsWith('G-') ? item.residents.nik.substring(2) : item.residents?.nik}
+                      </p>
                     </td>
                     <td className="px-8 py-5">
                       <p className="text-sm font-bold text-rose-600 uppercase tracking-tight mb-0.5">{item.title}</p>
@@ -158,6 +183,13 @@ export default function AduanPage() {
                             <CheckCircle className="h-3 w-3" /> SELESAIKAN
                           </button>
                         )}
+                        <button 
+                          onClick={() => handleDelete(item.id)} 
+                          className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors"
+                          title="Hapus Laporan"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                         <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400"><ArrowUpRight className="h-4 w-4" /></button>
                       </div>
                     </td>

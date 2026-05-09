@@ -28,12 +28,28 @@ export default function SuratPage() {
     try {
       setLoading(true);
       if (activeTab === 'requests') {
-        const { data, error } = await supabase
+        // 1. Ambil data surat saja
+        const { data: suratData, error: suratError } = await supabase
           .from('surat_warga')
-          .select('*, residents(full_name, nik)')
+          .select('*')
           .order('created_at', { ascending: false });
-        if (error) throw error;
-        setRequests(data || []);
+          
+        if (suratError) throw suratError;
+
+        // 2. Ambil data semua warga untuk di-mapping
+        const { data: residentData, error: resError } = await supabase
+          .from('residents')
+          .select('id, full_name, nik');
+          
+        if (resError) throw resError;
+
+        // 3. Gabungkan data secara manual di memory agar tidak error join ambigu
+        const mappedData = (suratData || []).map(surat => ({
+          ...surat,
+          residents: residentData?.find(r => r.id === surat.resident_id) || null
+        }));
+
+        setRequests(mappedData);
       } else {
         const { data, error } = await supabase
           .from('arsip_surat_rt')
@@ -42,8 +58,9 @@ export default function SuratPage() {
         if (error) throw error;
         setArchive(data || []);
       }
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      console.error("Fetch Surat Error:", error);
+      alert("Gagal sinkron data surat: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -87,6 +104,21 @@ export default function SuratPage() {
       fetchData();
     } catch (error: any) {
       alert(error.message);
+    }
+  };
+
+  const handleDeleteRequest = async (id: string) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus permohonan surat ini?")) return;
+    try {
+      const { error } = await supabase
+        .from('surat_warga')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      alert("Permohonan surat berhasil dihapus!");
+      fetchData();
+    } catch (error: any) {
+      alert("Gagal menghapus permohonan: " + error.message);
     }
   };
 
@@ -178,7 +210,9 @@ export default function SuratPage() {
                       </td>
                       <td className="px-8 py-5">
                         <p className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">{req.residents?.full_name}</p>
-                        <p className="text-[10px] text-slate-500 font-bold">NIK: {req.residents?.nik}</p>
+                        <p className="text-[10px] text-slate-500 font-bold">
+                          NIK: {req.residents?.nik?.startsWith('G-') ? req.residents.nik.substring(2) : req.residents?.nik}
+                        </p>
                       </td>
                       <td className="px-8 py-5 text-sm font-bold text-emerald-600">{req.type}</td>
                       <td className="px-8 py-5 text-xs text-slate-500 font-medium max-w-xs truncate">{req.purpose}</td>
@@ -203,6 +237,13 @@ export default function SuratPage() {
                               <CheckCircle className="h-3 w-3" /> SELESAIKAN
                             </button>
                           )}
+                          <button 
+                            onClick={() => handleDeleteRequest(req.id)} 
+                            className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors"
+                            title="Hapus Permohonan"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>

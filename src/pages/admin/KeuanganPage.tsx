@@ -14,9 +14,31 @@ export default function KeuanganPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [newBill, setNewBill] = useState({
     resident_id: '',
-    month: 'Juni 2024',
-    amount: 50000,
+    month: '',
+    amount: '' as any,
+    type: 'Iuran Bulanan'
   });
+
+  const formatRupiah = (value: string) => {
+    if (!value) return '';
+    const numberString = value.toString().replace(/[^,\d]/g, '');
+    const split = numberString.split(',');
+    const sisa = split[0].length % 3;
+    let rupiah = split[0].substr(0, sisa);
+    const ribuan = split[0].substr(sisa).match(/\d{3}/gi);
+
+    if (ribuan) {
+      const separator = sisa ? '.' : '';
+      rupiah += separator + ribuan.join('.');
+    }
+
+    return split[1] !== undefined ? rupiah + ',' + split[1] : rupiah;
+  };
+
+  const parseNumber = (formattedValue: string) => {
+    if (!formattedValue) return 0;
+    return parseInt(formattedValue.toString().replace(/\./g, '')) || 0;
+  };
 
   useEffect(() => {
     fetchAllData();
@@ -25,23 +47,32 @@ export default function KeuanganPage() {
   const fetchAllData = async () => {
     try {
       setLoading(true);
-      // Fetch payments
-      const { data: pData, error: pError } = await supabase
-        .from('dues_payments')
-        .select('*, residents(full_name, nik)')
-        .order('payment_date', { ascending: false });
-      if (pError) throw pError;
-      setPayments(pData || []);
-
-      // Fetch residents for dropdown
-      const { data: rData, error: rError } = await supabase
+      
+      // 1. Fetch residents for dropdown (Harus dimuat duluan)
+      const { data: residentData, error: rError } = await supabase
         .from('residents')
-        .select('id, full_name, nik')
+        .select('id, full_name, nik, families(no_kk)')
         .order('full_name');
-      if (rError) throw rError;
-      setResidents(rData || []);
-    } catch (error) {
-      console.error(error);
+      if (residentData) setResidents(residentData);
+
+      // 2. Fetch payments (Manual mapping)
+      const { data: paymentData, error: pError } = await supabase
+        .from('dues_payments')
+        .select('*')
+        .order('payment_date', { ascending: false });
+      
+      if (pError) throw pError;
+      
+      const mappedPayments = (paymentData || []).map(payment => ({
+        ...payment,
+        residents: residentData?.find(r => r.id === payment.resident_id) || null
+      }));
+
+      setPayments(mappedPayments);
+      
+    } catch (error: any) {
+      console.error("Keuangan Fetch Error:", error);
+      alert("Gagal sinkron data keuangan: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -56,13 +87,14 @@ export default function KeuanganPage() {
       const { error } = await supabase.from('dues_payments').insert([{
         resident_id: newBill.resident_id,
         month: newBill.month,
-        amount: newBill.amount,
+        amount: parseNumber(newBill.amount.toString()),
         status: 'pending',
-        method: 'Tagihan Admin'
+        method: newBill.type // Menggunakan jenis tagihan sebagai method/keterangan
       }]);
       if (error) throw error;
       alert("Tagihan iuran berhasil dibuat!");
       setIsModalOpen(false);
+      setNewBill({ resident_id: '', month: '', amount: '', type: 'Iuran Bulanan' });
       fetchAllData();
     } catch (error: any) {
       alert(error.message);
@@ -154,7 +186,9 @@ export default function KeuanganPage() {
                     </td>
                     <td className="px-8 py-5">
                       <p className="text-sm font-black text-slate-900 dark:text-white uppercase">{payment.residents?.full_name}</p>
-                      <p className="text-[10px] text-slate-400 font-bold">NIK: {payment.residents?.nik}</p>
+                      <p className="text-[10px] text-slate-400 font-bold">
+                        NIK: {payment.residents?.nik?.startsWith('G-') ? payment.residents.nik.substring(2) : payment.residents?.nik}
+                      </p>
                     </td>
                     <td className="px-8 py-5 text-sm font-bold text-slate-600 uppercase">{payment.month}</td>
                     <td className="px-8 py-5 font-black text-emerald-600 text-sm">Rp {payment.amount?.toLocaleString('id-ID')}</td>
@@ -219,21 +253,50 @@ export default function KeuanganPage() {
                     className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-900 dark:text-white border-none focus:ring-2 focus:ring-emerald-500"
                   >
                     <option value="">-- Pilih Nama Warga --</option>
-                    {residents.map(r => (
-                      <option key={r.id} value={r.id}>{r.full_name} ({r.nik})</option>
-                    ))}
+                    {residents.map(r => {
+                      // Hapus awalan 'G-' dari NIK jika ada agar rapi
+                      const cleanNik = r.nik?.startsWith('G-') ? r.nik.substring(2) : r.nik;
+                      
+                      return (
+                        <option key={r.id} value={r.id}>
+                          {r.full_name} (NIK: {cleanNik})
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-full">
+                  <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Jenis Tagihan</label>
+                  <input 
+                    type="text" 
+                    value={newBill.type} 
+                    onChange={(e) => setNewBill({...newBill, type: e.target.value})} 
+                    className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-900 dark:text-white border-none focus:ring-2 focus:ring-emerald-500" 
+                    placeholder="Contoh: Iuran Keamanan, Kebersihan, dll" 
+                  />
+                </div>
+
                 <div>
                   <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Periode Bulan</label>
                   <input type="text" value={newBill.month} onChange={(e) => setNewBill({...newBill, month: e.target.value})} className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-900 dark:text-white border-none focus:ring-2 focus:ring-emerald-500" placeholder="Mei 2024" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Nominal (Rp)</label>
-                  <input type="number" value={newBill.amount} onChange={(e) => setNewBill({...newBill, amount: parseInt(e.target.value)})} className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-900 dark:text-white border-none focus:ring-2 focus:ring-emerald-500" />
+                  <input 
+                    type="text" 
+                    value={formatRupiah(newBill.amount.toString())} 
+                    onChange={(e) => {
+                      const rawValue = e.target.value.replace(/\./g, '');
+                      if (!isNaN(Number(rawValue)) || rawValue === '') {
+                        setNewBill({...newBill, amount: rawValue});
+                      }
+                    }} 
+                    className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-900 dark:text-white border-none focus:ring-2 focus:ring-emerald-500" 
+                    placeholder="Contoh: 50.000"
+                  />
                 </div>
               </div>
 
