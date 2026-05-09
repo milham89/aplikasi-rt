@@ -26,7 +26,7 @@ export default function WargaLaporPage() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('resident_complaints')
+        .from('complaints')
         .select('*')
         .eq('resident_id', resident.id)
         .order('created_at', { ascending: false });
@@ -43,7 +43,7 @@ export default function WargaLaporPage() {
     e.preventDefault();
     setIsSaving(true);
     try {
-      const { error } = await supabase.from('resident_complaints').insert([{
+      const { error } = await supabase.from('complaints').insert([{
         resident_id: resident.id,
         title: newLaporan.title,
         category: newLaporan.category,

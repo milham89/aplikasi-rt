@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { Home, Users, BookOpen, LogOut, Settings, Bell, Search, Menu, CreditCard, FileText, AlertTriangle, Sun, Moon, UserCog, Megaphone, X } from 'lucide-react';
+import { Home, Users, BookOpen, LogOut, Settings, Bell, Search, Menu, CreditCard, FileText, AlertTriangle, Sun, Moon, UserCog, Megaphone, X, CheckCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../components/ThemeProvider';
 
@@ -10,14 +10,91 @@ export default function AdminLayout() {
   const { theme, setTheme } = useTheme();
   const [adminName, setAdminName] = useState('Bpk. Ketua RT');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [totalPending, setTotalPending] = useState(0);
 
   useEffect(() => {
     const fetchAdminName = async () => {
-      const { data } = await supabase.from('app_settings').select('admin_name').eq('id', 1).single();
-      if (data) setAdminName(data.admin_name);
+      try {
+        const { data } = await supabase.from('app_settings').select('admin_name').eq('id', 1).single();
+        if (data) setAdminName(data.admin_name);
+      } catch (err) {
+        console.warn("Table app_settings not found, using default name.");
+      }
     };
     fetchAdminName();
   }, []);
+
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 60000); // Auto-refresh every minute
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      // 1. Fetch Pending Letters
+      const { data: letters } = await supabase
+        .from('letters')
+        .select('id, title, status, created_at, residents(full_name)')
+        .eq('status', 'pending')
+        .limit(5);
+
+      // 2. Fetch Pending Complaints
+      const { data: complaints } = await supabase
+        .from('complaints')
+        .select('id, title, status, created_at, residents(full_name)')
+        .eq('status', 'pending')
+        .limit(5);
+
+      // 3. Fetch Pending Payments
+      const { data: payments } = await supabase
+        .from('resident_payments')
+        .select('id, amount, status, created_at, residents(full_name)')
+        .eq('status', 'pending')
+        .limit(5);
+
+      const combined: any[] = [];
+      if (letters) {
+        letters.forEach(l => combined.push({
+          id: l.id,
+          type: 'surat',
+          title: 'Permintaan Surat',
+          content: `${(l as any).residents?.full_name} mengajukan ${l.title}`,
+          date: l.created_at,
+          link: '/admin/surat'
+        }));
+      }
+      if (complaints) {
+        complaints.forEach(c => combined.push({
+          id: c.id,
+          type: 'aduan',
+          title: 'Aduan Warga Baru',
+          content: `${(c as any).residents?.full_name}: ${c.title}`,
+          date: c.created_at,
+          link: '/admin/aduan'
+        }));
+      }
+      if (payments) {
+        payments.forEach(p => combined.push({
+          id: p.id,
+          type: 'bayar',
+          title: 'Konfirmasi Iuran',
+          content: `${(p as any).residents?.full_name} membayar Rp ${Number(p.amount).toLocaleString('id-ID')}`,
+          date: p.created_at,
+          link: '/admin/keuangan'
+        }));
+      }
+
+      // Sort by date newest first
+      combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      
+      setNotifications(combined);
+      setTotalPending(combined.length);
+    } catch (err) {
+      console.error("Error fetching notifications:", err);
+    }
+  };
 
   useEffect(() => {
     // Close sidebar on route change (for mobile)
@@ -149,44 +226,64 @@ export default function AdminLayout() {
                 className="relative p-2.5 text-slate-500 dark:text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-full transition-colors focus:outline-none"
               >
                 <Bell className="h-5 w-5" />
-                <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+                {totalPending > 0 && (
+                  <span className="absolute top-2 right-2 w-4 h-4 bg-rose-500 text-white text-[8px] font-black rounded-full border-2 border-white dark:border-slate-900 flex items-center justify-center">
+                    {totalPending}
+                  </span>
+                )}
               </button>
               
               {/* Dropdown Notifikasi */}
-              <div id="notif-dropdown" className="hidden absolute right-0 mt-2 w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 z-50 overflow-hidden transition-all">
-                <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
-                  <h3 className="font-semibold text-slate-800 dark:text-slate-200">Notifikasi Baru</h3>
-                  <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-medium">2 Baru</span>
+              <div id="notif-dropdown" className="hidden absolute right-0 mt-3 w-85 bg-white dark:bg-slate-900 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-slate-100 dark:border-slate-800 z-50 overflow-hidden transition-all animate-in zoom-in-95 duration-200 origin-top-right">
+                <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Notifikasi Baru</h3>
+                  <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-3 py-1 rounded-full font-black uppercase tracking-widest">{totalPending} Pending</span>
                 </div>
-                <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[300px] overflow-y-auto">
-                  <Link to="/admin/aduan" className="block p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                    <div className="flex gap-3">
-                      <div className="bg-rose-100 dark:bg-rose-500/20 p-2 rounded-full h-fit">
-                        <AlertTriangle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[350px] overflow-y-auto custom-scrollbar">
+                  {notifications.length === 0 ? (
+                    <div className="p-10 text-center">
+                      <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <CheckCircle className="h-6 w-6 text-emerald-500" />
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Aduan Warga Baru</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">Lampu jalan mati di area Blok A, mohon segera ditindaklanjuti.</p>
-                        <p className="text-[10px] text-slate-400 mt-2 font-medium">10 menit yang lalu</p>
-                      </div>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Semua tugas selesai!</p>
                     </div>
-                  </Link>
-                  <Link to="/admin/surat" className="block p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                    <div className="flex gap-3">
-                      <div className="bg-blue-100 dark:bg-blue-500/20 p-2 rounded-full h-fit">
-                        <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Permintaan Surat Pengantar</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Bpk. Ahmad Fauzi mengajukan pembuatan surat pengantar KTP.</p>
-                        <p className="text-[10px] text-slate-400 mt-2 font-medium">1 jam yang lalu</p>
-                      </div>
-                    </div>
-                  </Link>
+                  ) : (
+                    notifications.map((notif, idx) => (
+                      <Link 
+                        key={idx} 
+                        to={notif.link} 
+                        className="block p-5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group"
+                        onClick={() => document.getElementById('notif-dropdown')?.classList.add('hidden')}
+                      >
+                        <div className="flex gap-4">
+                          <div className={`p-2.5 rounded-xl h-fit transition-transform group-hover:scale-110 ${
+                            notif.type === 'surat' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 
+                            notif.type === 'bayar' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600' :
+                            'bg-rose-50 dark:bg-rose-900/20 text-rose-600'
+                          }`}>
+                            {notif.type === 'surat' ? <FileText className="h-5 w-5" /> : 
+                             notif.type === 'bayar' ? <CreditCard className="h-5 w-5" /> :
+                             <AlertTriangle className="h-5 w-5" />}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex justify-between items-start mb-1">
+                              <p className="text-sm font-black text-slate-800 dark:text-slate-100 tracking-tight">{notif.title}</p>
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                {new Date(notif.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed">{notif.content}</p>
+                          </div>
+                        </div>
+                      </Link>
+                    ))
+                  )}
                 </div>
-                <div className="p-3 text-center border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
-                  <button className="text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300">Tandai semua dibaca</button>
-                </div>
+                {notifications.length > 0 && (
+                  <div className="p-4 text-center border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Selesaikan tugas anda hari ini</p>
+                  </div>
+                )}
               </div>
             </div>
 

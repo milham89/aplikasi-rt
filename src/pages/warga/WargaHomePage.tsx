@@ -6,53 +6,93 @@ import { supabase } from '../../lib/supabase';
 
 export default function WargaHomePage() {
   const { resident } = useOutletContext<{ resident: any }>();
+  const [stats, setStats] = useState({ surat: 0, aduan: 0 });
+  const [duesStatus, setDuesStatus] = useState('LUNAS');
   const [hasUnpaidDues, setHasUnpaidDues] = useState(false);
-  const [announcements, setAnnouncements] = useState<any[]>([]);
-  const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
 
   useEffect(() => {
     if (resident?.id) {
-      checkDuesStatus();
+      fetchDashboardData();
       fetchAnnouncements();
     }
   }, [resident]);
 
   const fetchAnnouncements = async () => {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('announcements')
         .select('*')
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(3);
-      if (error) throw error;
       setAnnouncements(data || []);
     } catch (error) {
       console.error(error);
     }
   };
 
-  const checkDuesStatus = async () => {
+  const fetchDashboardData = async () => {
     try {
-      const { data, error } = await supabase
-        .from('dues_payments')
-        .select('id')
-        .eq('resident_id', resident.id)
-        .eq('status', 'pending');
+      setLoading(true);
+      const resId = resident?.id;
+      const famId = resident?.family_id;
       
-      if (error) throw error;
-      setHasUnpaidDues(data && data.length > 0);
+      if (!resId || resId === '00000000-0000-0000-0000-000000000000') {
+        setLoading(false);
+        return;
+      }
+      
+      // 1. Check Dues Status (Defensive)
+      let duesData: any[] = [];
+      try {
+        const { data } = await supabase.from('payments').select('status').eq('family_id', famId).order('created_at', { ascending: false }).limit(1);
+        if (data) duesData = data;
+      } catch (e) {
+        console.error("Payments fetch failed");
+      }
+      
+      if (duesData && duesData.length > 0) {
+        const s = duesData[0]?.status;
+        const isLunas = s === 'verified' || s === 'success';
+        const isPending = s === 'pending' || s === 'waiting_verification';
+        setDuesStatus(isLunas ? 'LUNAS' : isPending ? 'MENUNGGU VERIFIKASI' : 'BELUM BAYAR');
+        setHasUnpaidDues(!isLunas);
+      }
+
+      // 2. Fetch Stats & Recent Activities (Defensive)
+      let sData: any[] = [], aData: any[] = [];
+      try {
+        const res = await supabase.from('letters').select('*').eq('resident_id', resId).order('created_at', { ascending: false });
+        if (res.data) sData = res.data;
+      } catch (e) { console.error("Letters fetch failed"); }
+
+      try {
+        const res = await supabase.from('complaints').select('*').eq('resident_id', resId).order('created_at', { ascending: false });
+        if (res.data) aData = res.data;
+      } catch (e) { console.error("Complaints fetch failed"); }
+
+      const safeSData = Array.isArray(sData) ? sData.filter(Boolean) : [];
+      const safeAData = Array.isArray(aData) ? aData.filter(Boolean) : [];
+
+      setStats({
+        surat: safeSData.filter((s: any) => s.status !== 'completed' && s.status !== 'rejected').length,
+        aduan: safeAData.filter((a: any) => a.status !== 'resolved').length
+      });
+
     } catch (error) {
-      console.error(error);
+      console.error("Dashboard critical error:", error);
     } finally {
       setLoading(false);
     }
   };
 
+  // fetchAnnouncements removed from here as it is defined above
+
   return (
-    <div className="space-y-10 pb-20">
-      {/* Wallet-Style Status Card - Now Dynamic */}
+    <div className="space-y-10 pb-28">
+      {/* Wallet-Style Status Card */}
       <div className="relative pt-2">
         <div className={`absolute inset-0 rounded-[2.5rem] blur-3xl opacity-10 animate-pulse ${hasUnpaidDues ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
         <Card className="bg-white dark:bg-slate-900 border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-[2.5rem] overflow-hidden relative">
@@ -60,10 +100,10 @@ export default function WargaHomePage() {
             <div className="flex justify-between items-center mb-8">
               <div className="space-y-1">
                 <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full ${hasUnpaidDues ? 'bg-rose-50 text-rose-600 dark:bg-rose-500/10' : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10'}`}>
-                  Status Iuran
+                  Status Pembayaran
                 </span>
-                <h2 className={`text-3xl font-black tracking-tighter pt-2 ${hasUnpaidDues ? 'text-rose-600' : 'text-slate-900 dark:text-white'}`}>
-                  {loading ? 'MENGECEK...' : hasUnpaidDues ? 'ADA TUNGGAKAN' : 'LUNAS'}
+                <h2 className={`text-2xl font-black tracking-tighter pt-2 uppercase ${hasUnpaidDues ? 'text-rose-600' : 'text-slate-900 dark:text-white'}`}>
+                  {loading ? 'MENGECEK...' : duesStatus}
                 </h2>
               </div>
               <div className={`h-16 w-16 rounded-[1.5rem] flex items-center justify-center shadow-lg transition-colors ${hasUnpaidDues ? 'bg-rose-500 shadow-rose-500/30' : 'bg-emerald-500 shadow-emerald-500/30'}`}>
@@ -71,13 +111,15 @@ export default function WargaHomePage() {
               </div>
             </div>
             
-            <div className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${hasUnpaidDues ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-100 dark:border-rose-900' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800'}`}>
-              <div className="h-8 w-8 bg-white dark:bg-slate-900 rounded-xl flex items-center justify-center shadow-sm">
-                <Info className={`h-4 w-4 ${hasUnpaidDues ? 'text-rose-500' : 'text-emerald-500'}`} />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Surat Aktif</p>
+                <p className="text-xl font-black text-slate-900 dark:text-white">{stats.surat}</p>
               </div>
-              <p className={`text-xs font-bold ${hasUnpaidDues ? 'text-rose-700 dark:text-rose-400' : 'text-slate-600 dark:text-slate-300'}`}>
-                {hasUnpaidDues ? 'Segera lakukan pembayaran untuk bulan ini' : 'Terverifikasi oleh admin'}
-              </p>
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Aduan Aktif</p>
+                <p className="text-xl font-black text-slate-900 dark:text-white">{stats.aduan}</p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -98,9 +140,9 @@ export default function WargaHomePage() {
             <h3 className="text-xl font-black text-slate-800 dark:text-white tracking-tight">Info Terkini</h3>
             <p className="text-[10px] text-slate-500 font-black uppercase tracking-tighter">Berita RT Sekitar Anda</p>
           </div>
-          <button className="text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 rounded-xl hover:bg-emerald-500 hover:text-white transition-all">
+          <Link to="/warga/info" className="text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 rounded-xl hover:bg-emerald-500 hover:text-white transition-all">
             LIHAT SEMUA
-          </button>
+          </Link>
         </div>
 
         {announcements.length === 0 ? (

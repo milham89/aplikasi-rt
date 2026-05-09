@@ -27,7 +27,7 @@ export default function WargaSuratPage() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('surat_warga')
+        .from('letters')
         .select('*')
         .eq('resident_id', resident.id)
         .order('created_at', { ascending: false });
@@ -48,7 +48,7 @@ export default function WargaSuratPage() {
     }
     try {
       setLoading(true);
-      const { error } = await supabase.from('surat_warga').insert([{
+      const { error } = await supabase.from('letters').insert([{
         resident_id: resident.id,
         type: newRequest.type,
         purpose: newRequest.purpose,
@@ -76,6 +76,7 @@ export default function WargaSuratPage() {
       case 'requested': return { color: 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400', icon: <Clock className="h-4 w-4" />, label: 'DIAJUKAN' };
       case 'processed': return { color: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400', icon: <Clock className="h-4 w-4" />, label: 'DIPROSES' };
       case 'completed': return { color: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400', icon: <CheckCircle className="h-4 w-4" />, label: 'SELESAI' };
+      case 'rejected': return { color: 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-400', icon: <X className="h-4 w-4" />, label: 'DITOLAK' };
       default: return { color: 'bg-slate-50 text-slate-700', icon: <AlertCircle className="h-4 w-4" />, label: status };
     }
   };
@@ -142,6 +143,12 @@ export default function WargaSuratPage() {
                         {new Date(req.created_at).toLocaleDateString('id-ID')} {new Date(req.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
+                    {req.status === 'rejected' && req.rejection_reason && (
+                      <div className="mt-3 p-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800 rounded-xl">
+                        <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-1">Alasan Penolakan:</p>
+                        <p className="text-xs text-rose-700 dark:text-rose-300 font-bold leading-relaxed">{req.rejection_reason}</p>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
