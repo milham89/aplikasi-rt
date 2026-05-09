@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { Home, Users, BookOpen, LogOut, Settings, Bell, Search, Menu, CreditCard, FileText, AlertTriangle, Sun, Moon, UserCog, Megaphone, X } from 'lucide-react';
+import { Home, Users, BookOpen, LogOut, Settings, Bell, Search, Menu, CreditCard, FileText, AlertTriangle, Sun, Moon, UserCog, Megaphone, X, CheckCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../components/ThemeProvider';
 
@@ -225,14 +225,12 @@ export default function AdminLayout() {
                 onClick={() => document.getElementById('notif-dropdown')?.classList.toggle('hidden')}
                 className="relative p-2.5 text-slate-500 dark:text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-full transition-colors focus:outline-none"
               >
-                <span className="relative p-2.5 text-slate-500 dark:text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-full transition-colors focus:outline-none">
-                  <Bell className="h-5 w-5" />
-                  {totalPending > 0 && (
-                    <span className="absolute top-2 right-2 w-4 h-4 bg-rose-500 text-white text-[8px] font-black rounded-full border-2 border-white dark:border-slate-900 flex items-center justify-center">
-                      {totalPending}
-                    </span>
-                  )}
-                </span>
+                <Bell className="h-5 w-5" />
+                {totalPending > 0 && (
+                  <span className="absolute top-2 right-2 w-4 h-4 bg-rose-500 text-white text-[8px] font-black rounded-full border-2 border-white dark:border-slate-900 flex items-center justify-center">
+                    {totalPending}
+                  </span>
+                )}
               </button>
               
               {/* Dropdown Notifikasi */}
