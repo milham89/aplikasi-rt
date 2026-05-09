@@ -19,6 +19,7 @@ import WargaSuratPage from './pages/warga/WargaSuratPage';
 import WargaLaporPage from './pages/warga/WargaLaporPage';
 import WargaProfilPage from './pages/warga/WargaProfilPage';
 import WargaIuranPage from './pages/warga/WargaIuranPage';
+import WargaInfoPage from './pages/warga/WargaInfoPage';
 
 function App() {
   return (
@@ -51,6 +52,7 @@ function App() {
           <Route path="lapor" element={<WargaLaporPage />} />
           <Route path="profil" element={<WargaProfilPage />} />
           <Route path="iuran" element={<WargaIuranPage />} />
+          <Route path="info" element={<WargaInfoPage />} />
         </Route>
 
         {/* Redirect root to login for now */}

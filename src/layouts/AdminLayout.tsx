@@ -13,8 +13,12 @@ export default function AdminLayout() {
 
   useEffect(() => {
     const fetchAdminName = async () => {
-      const { data } = await supabase.from('app_settings').select('admin_name').eq('id', 1).single();
-      if (data) setAdminName(data.admin_name);
+      try {
+        const { data } = await supabase.from('app_settings').select('admin_name').eq('id', 1).single();
+        if (data) setAdminName(data.admin_name);
+      } catch (err) {
+        console.warn("Table app_settings not found, using default name.");
+      }
     };
     fetchAdminName();
   }, []);

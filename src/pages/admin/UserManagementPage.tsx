@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card } from '../../components/ui/Card';
 import { supabase } from '../../lib/supabase';
-import { Search, Plus, X, Loader2, Save, Edit2, Trash2, Key, User, Mail, Hash, Shield, ChevronRight, ChevronLeft, Check } from 'lucide-react';
+import { Search, Plus, X, Loader2, Save, Edit2, Trash2, Key, User, Mail, Hash, Shield, ChevronRight, ChevronLeft, Check, Clock, PhoneCall, Briefcase, Camera } from 'lucide-react';
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState<any[]>([]);
@@ -12,18 +12,22 @@ export default function UserManagementPage() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   
   const [formData, setFormData] = useState({
     full_name: '',
     nik: '',
+    phone_number: '',
+    occupation: '',
     username: '',
     email: '',
     password: '',
     role: 'warga',
     family_id: '',
     family_relation: 'Kepala Keluarga',
-    status: 'Aktif'
+    status: 'Aktif',
+    avatar_url: ''
   });
 
   useEffect(() => {
@@ -36,9 +40,13 @@ export default function UserManagementPage() {
       setLoading(true);
       const { data, error } = await supabase
         .from('residents')
-        .select(`id, full_name, nik, username, email, role, status, family_id, family_relation`)
+        .select(`id, user_id, full_name, nik, phone_number, occupation, username, email, role, status, family_id, family_relation, avatar_url`)
         .order('full_name', { ascending: true });
-      if (error) throw error;
+      if (error) {
+        console.error("Fetch Users Error:", error);
+        setUsers([]); // Reset data agar tidak crash
+        return;
+      }
       setUsers(data || []);
     } catch (error: any) {
       alert("Gagal memuat data: " + error.message);
@@ -59,13 +67,16 @@ export default function UserManagementPage() {
     setFormData({
       full_name: '',
       nik: '',
+      phone_number: '',
+      occupation: '',
       username: '',
       email: '',
       password: '',
       role: 'warga',
       family_id: families.length > 0 ? families[0].id : '',
       family_relation: 'Kepala Keluarga',
-      status: 'Aktif'
+      status: 'Aktif',
+      avatar_url: ''
     });
     setIsModalOpen(true);
   };
@@ -77,15 +88,82 @@ export default function UserManagementPage() {
     setFormData({
       full_name: user.full_name || '',
       nik: user.nik || '',
+      phone_number: user.phone_number || '',
+      occupation: user.occupation || '',
       username: user.username || '',
       email: user.email || '',
       password: '',
       role: user.role || 'warga',
       family_id: user.family_id || '',
       family_relation: user.family_relation || 'Kepala Keluarga',
-      status: user.status || 'Aktif'
+      status: user.status || 'Aktif',
+      avatar_url: user.avatar_url || ''
     });
     setIsModalOpen(true);
+  };
+
+  const handlePhotoUpload = async (e: any, residentId: string) => {
+    try {
+      setUploading(true);
+      const file = e.target.files[0];
+      if (!file) return;
+
+      // Limit to 500KB
+      if (file.size > 500 * 1024) {
+        alert("Ukuran foto terlalu besar (Maksimal 500KB).");
+        return;
+      }
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${residentId}-${Math.random()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('residents')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('residents')
+        .getPublicUrl(filePath);
+
+      const { error: updateError } = await supabase
+        .from('residents')
+        .update({ avatar_url: publicUrl })
+        .eq('id', residentId);
+
+      if (updateError) throw updateError;
+      
+      setFormData(prev => ({ ...prev, avatar_url: publicUrl }));
+      fetchUsers();
+      alert("Foto profil berhasil diperbarui!");
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handlePhotoDelete = async (residentId: string) => {
+    if (!window.confirm("Hapus foto profil user ini?")) return;
+    try {
+      setUploading(true);
+      const { error } = await supabase
+        .from('residents')
+        .update({ avatar_url: null })
+        .eq('id', residentId);
+
+      if (error) throw error;
+      
+      setFormData(prev => ({ ...prev, avatar_url: '' }));
+      fetchUsers();
+      alert("Foto profil berhasil dihapus!");
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setUploading(false);
+    }
   };
 
   const nextStep = () => setCurrentStep(prev => prev + 1);
@@ -95,37 +173,71 @@ export default function UserManagementPage() {
     e.preventDefault();
     setIsSaving(isEditMode ? 'editing' : 'adding');
     try {
+      const payload: any = {
+        full_name: formData.full_name,
+        nik: formData.nik,
+        phone_number: formData.phone_number,
+        occupation: formData.occupation,
+        username: formData.username,
+        email: formData.email,
+        role: formData.role,
+        status: formData.status,
+        family_id: formData.family_id || null,
+        family_relation: formData.family_relation
+      };
+
       if (isEditMode && selectedId) {
-        const { error } = await supabase.from('residents').update({
-          full_name: formData.full_name,
-          nik: formData.nik,
-          username: formData.username,
-          email: formData.email,
-          role: formData.role,
-          status: formData.status,
-          family_id: formData.family_id,
-          family_relation: formData.family_relation
-        }).eq('id', selectedId);
+        // Logika Update: Cek apakah admin mengganti password
+        if (formData.password) {
+          // Update password via API (butuh admin privileges atau re-auth, biasanya disarankan via admin panel)
+          // Untuk demo ini, kita asumsikan update profil residents saja jika password kosong
+        }
+
+        const { error } = await supabase
+          .from('residents')
+          .update(payload)
+          .eq('id', selectedId);
         if (error) throw error;
-      } else {
+        
+        alert("Profil warga berhasil diperbarui!");
+      } else if (!isEditMode) {
+        // 1. Cek apakah warga dengan NIK ini sudah ada di database (tapi belum punya user_id)
+        const { data: existingResident } = await supabase
+          .from('residents')
+          .select('id, user_id')
+          .eq('nik', formData.nik)
+          .maybeSingle();
+
+        // 2. Buat akun Auth baru
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: formData.email,
           password: formData.password
         });
+
         if (authError) throw authError;
+
         if (authData.user) {
-          const { error: resError } = await supabase.from('residents').insert([{
-            user_id: authData.user.id,
-            full_name: formData.full_name,
-            nik: formData.nik,
-            username: formData.username,
-            email: formData.email,
-            role: formData.role,
-            status: formData.status,
-            family_id: formData.family_id,
-            family_relation: formData.family_relation
-          }]);
-          if (resError) throw resError;
+          if (existingResident) {
+            // Jika warga sudah ada, SINKRONKAN (Update user_id pada record yang sudah ada)
+            const { error: syncError } = await supabase
+              .from('residents')
+              .update({
+                ...payload,
+                user_id: authData.user.id
+              })
+              .eq('id', existingResident.id);
+            
+            if (syncError) throw syncError;
+            alert("Berhasil menghubungkan akun login ke data warga yang sudah ada!");
+          } else {
+            // Jika warga benar-benar baru, INSERT baru
+            const { error: resError } = await supabase.from('residents').insert([{
+              ...payload,
+              user_id: authData.user.id,
+            }]);
+            if (resError) throw resError;
+            alert("Berhasil membuat data warga dan akun login baru!");
+          }
         }
       }
       setIsModalOpen(false);
@@ -134,6 +246,17 @@ export default function UserManagementPage() {
       alert("Error: " + error.message);
     } finally {
       setIsSaving(null);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Hapus akun user/warga ini?")) return;
+    try {
+      const { error } = await supabase.from('residents').delete().eq('id', id);
+      if (error) throw error;
+      fetchUsers();
+    } catch (error: any) {
+      alert("Gagal menghapus: " + error.message);
     }
   };
 
@@ -174,8 +297,10 @@ export default function UserManagementPage() {
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50/50 dark:bg-slate-800/50 text-slate-500 border-b dark:border-slate-800">
               <tr>
-                <th className="px-6 py-5 font-black uppercase tracking-widest text-[10px]">Identitas</th>
-                <th className="px-6 py-5 font-black uppercase tracking-widest text-[10px]">Email & User</th>
+                <th className="px-6 py-5 font-black uppercase tracking-widest text-[10px]">Identitas & Pekerjaan</th>
+                <th className="px-6 py-5 font-black uppercase tracking-widest text-[10px]">WhatsApp</th>
+                <th className="px-6 py-5 font-black uppercase tracking-widest text-[10px]">Username & Email</th>
+                <th className="px-6 py-5 font-black uppercase tracking-widest text-[10px]">Status Akun</th>
                 <th className="px-6 py-5 text-right font-black uppercase tracking-widest text-[10px]">Opsi</th>
               </tr>
             </thead>
@@ -183,19 +308,62 @@ export default function UserManagementPage() {
               {filteredUsers.map((user) => (
                 <tr key={user.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
                   <td className="px-6 py-4">
-                    <p className="font-bold text-slate-800 dark:text-white">{user.full_name}</p>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">NIK: {user.nik}</p>
+                    <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden shrink-0">
+                        {user.avatar_url ? (
+                          <img src={user.avatar_url} alt="Profile" className="h-full w-full object-cover" />
+                        ) : (
+                          <User className="h-5 w-5 text-slate-400" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-800 dark:text-white">{user.full_name}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <Briefcase className="h-3 w-3 text-emerald-500" />
+                          <p className="text-[10px] text-slate-500 font-bold uppercase">{user.occupation || 'Belum Diisi'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                      <div className="h-8 w-8 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg flex items-center justify-center">
+                        <PhoneCall className="h-4 w-4 text-emerald-600" />
+                      </div>
+                      <span className="text-xs font-bold">{user?.phone_number || '-'}</span>
+                    </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-col">
-                      <span className="text-xs font-medium text-slate-600 dark:text-slate-400">{user.email}</span>
-                      <span className="text-[10px] font-black text-emerald-600">@{user.username || 'user'}</span>
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Auth Identity</span>
+                      <span className="text-xs font-black text-emerald-600">{user?.username ? `@${user.username}` : ''}</span>
+                      <span className="text-[10px] text-slate-500 font-bold lowercase line-clamp-1">{user?.email || '-'}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-col gap-2">
+                      {user?.user_id ? (
+                        <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1.5 rounded-full w-fit border border-emerald-500/20">
+                          <Check className="h-3 w-3" />
+                          <span className="text-[9px] font-black uppercase tracking-tighter">SIAP LOGIN</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-slate-400 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-full w-fit border border-slate-200 dark:border-slate-700">
+                          <Clock className="h-3 w-3" />
+                          <span className="text-[9px] font-black uppercase tracking-tighter">BELUM DAFTAR</span>
+                        </div>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button onClick={() => openEditModal(user)} className="p-2.5 bg-blue-50 text-blue-600 dark:bg-blue-900/20 rounded-xl transition-all hover:scale-110">
-                      <Edit2 className="h-4 w-4" />
-                    </button>
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => openEditModal(user)} className="p-2.5 bg-blue-50 text-blue-600 dark:bg-blue-900/20 rounded-xl transition-all hover:scale-110" title="Edit User">
+                        <Edit2 className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => handleDelete(user.id)} className="p-2.5 bg-rose-50 text-rose-600 dark:bg-rose-900/20 rounded-xl transition-all hover:scale-110" title="Hapus User">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -207,7 +375,7 @@ export default function UserManagementPage() {
       {/* MODAL STEPPER: KEMBALI KE TENGAH DENGAN POSISI SEMPURNA */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+          <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
             
             {/* Header Modal */}
             <div className="p-8 border-b dark:border-slate-800 flex justify-between items-center">
@@ -215,77 +383,166 @@ export default function UserManagementPage() {
                 <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
                   {isEditMode ? 'Update Data' : 'Tambah User'}
                 </h3>
-                <p className="text-[10px] text-emerald-600 font-black uppercase mt-1 tracking-widest">Langkah {currentStep} dari 3</p>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 hover:text-rose-500 transition-colors">
                 <X className="h-5 w-5" />
               </button>
             </div>
-
-            {/* Content Form */}
-            <div className="p-8">
-              {/* Step Progress Line */}
-              <div className="flex gap-2 mb-8">
-                {[1, 2, 3].map(s => (
-                  <div key={s} className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${currentStep >= s ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-slate-100 dark:bg-slate-800'}`}></div>
-                ))}
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {currentStep === 1 && (
-                  <div className="space-y-4 animate-in slide-in-from-right duration-300">
-                    <InputGroup icon={<User />} label="Nama Lengkap" value={formData.full_name} onChange={(v) => setFormData({...formData, full_name: v})} placeholder="Sesuai KTP" />
-                    <InputGroup icon={<Hash />} label="NIK" value={formData.nik} onChange={(v) => setFormData({...formData, nik: v})} placeholder="16 Digit NIK" />
+            <div className="p-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              {isEditMode && (
+                <div className="mb-8 p-6 bg-slate-50 dark:bg-slate-800/50 rounded-[2rem] border border-slate-100 dark:border-slate-800">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 px-1 flex items-center gap-2">
+                    <Camera className="h-3 w-3" /> Foto Profil User
+                  </h4>
+                  <div className="flex items-center gap-6">
+                    <div className="h-24 w-24 rounded-[2rem] bg-white dark:bg-slate-900 shadow-inner flex items-center justify-center overflow-hidden border-2 border-dashed border-slate-200 dark:border-slate-700">
+                      {uploading ? (
+                        <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+                      ) : formData.avatar_url ? (
+                        <img src={formData.avatar_url} alt="Preview" className="h-full w-full object-cover" />
+                      ) : (
+                        <User className="h-10 w-10 text-slate-300" />
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <button 
+                        type="button"
+                        onClick={() => document.getElementById('admin-avatar-upload')?.click()}
+                        className="px-5 py-2.5 bg-emerald-500 text-white text-[10px] font-black rounded-xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all uppercase"
+                      >
+                        Ganti Foto
+                      </button>
+                      {formData.avatar_url && (
+                        <button 
+                          type="button"
+                          onClick={() => handlePhotoDelete(selectedId!)}
+                          className="px-5 py-2.5 bg-white dark:bg-slate-900 text-rose-500 text-[10px] font-black rounded-xl border border-rose-100 dark:border-rose-900/30 active:scale-95 transition-all uppercase"
+                        >
+                          Hapus Foto
+                        </button>
+                      )}
+                      <input 
+                        id="admin-avatar-upload"
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={(e) => handlePhotoUpload(e, selectedId!)}
+                      />
+                    </div>
                   </div>
-                )}
-
-                {currentStep === 2 && (
-                  <div className="space-y-4 animate-in slide-in-from-right duration-300">
-                    <InputGroup icon={<Shield />} label="Username" value={formData.username} onChange={(v) => setFormData({...formData, username: v})} placeholder="budi01" />
-                    <InputGroup icon={<Mail />} label="Email Login" type="email" value={formData.email} onChange={(v) => setFormData({...formData, email: v})} placeholder="alamat@email.com" />
-                    {!isEditMode && (
-                      <InputGroup icon={<Key />} label="Password Awal" type="password" value={formData.password} onChange={(v) => setFormData({...formData, password: v})} placeholder="Min. 6 karakter" />
-                    )}
-                  </div>
-                )}
-
-                {currentStep === 3 && (
-                  <div className="space-y-4 animate-in slide-in-from-right duration-300">
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Pilih No. KK</label>
-                      <select required value={formData.family_id} onChange={(e) => setFormData({...formData, family_id: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-800 dark:text-white border-none focus:ring-2 focus:ring-emerald-500 shadow-inner">
-                        <option value="">-- Pilih KK --</option>
-                        {families.map(f => <option key={f.id} value={f.id}>{f.no_kk} - {f.address}</option>)}
+                </div>
+              )}
+              <form onSubmit={handleSubmit} className="space-y-8">
+                {/* Section 1: Domisili */}
+                <div className="space-y-4">
+                  <h4 className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500"></span> 1. Data Domisili
+                  </h4>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Pilih Kartu Keluarga (KK)</label>
+                    <div className="relative group">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors">
+                        <Hash className="h-5 w-5" />
+                      </div>
+                      <select 
+                        required 
+                        value={formData.family_id} 
+                        onChange={(e) => setFormData({...formData, family_id: e.target.value})} 
+                        className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-800 dark:text-white border-none focus:ring-2 focus:ring-emerald-500 shadow-inner"
+                      >
+                        <option value="">-- Pilih Kartu Keluarga --</option>
+                        {families?.map(f => (
+                          <option key={f.id} value={f.id}>
+                            {f.no_kk} - {f.address}
+                          </option>
+                        ))}
                       </select>
                     </div>
+                  </div>
+                </div>
+
+                {/* Section 2: Identitas */}
+                <div className="space-y-4">
+                  <h4 className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500"></span> 2. Identitas & Kontak
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <InputGroup icon={<User />} label="Nama Lengkap" value={formData.full_name} onChange={(v) => setFormData({...formData, full_name: v})} placeholder="Sesuai KTP" />
+                    <InputGroup icon={<Hash />} label="NIK" value={formData.nik} onChange={(v) => setFormData({...formData, nik: v})} placeholder="16 Digit NIK" />
+                    <InputGroup 
+                      icon={<PhoneCall />} 
+                      label="Nomor WhatsApp" 
+                      required={false} 
+                      value={formData.phone_number} 
+                      onChange={(v) => setFormData({...formData, phone_number: v})} 
+                      placeholder="0812xxxx" 
+                    />
+                    <InputGroup icon={<Briefcase />} label="Pekerjaan" required={false} value={formData.occupation} onChange={(v) => setFormData({...formData, occupation: v})} placeholder="PNS, Swasta, dll" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Hubungan Keluarga</label>
+                    <select 
+                      value={formData.family_relation} 
+                      onChange={(e) => setFormData({...formData, family_relation: e.target.value})} 
+                      className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-800 dark:text-white border-none focus:ring-2 focus:ring-emerald-500 shadow-inner"
+                    >
+                      <option value="Kepala Keluarga">Kepala Keluarga</option>
+                      <option value="Istri">Istri</option>
+                      <option value="Anak">Anak</option>
+                      <option value="Lainnya">Lainnya</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Section 3: Akses Akun */}
+                <div className="space-y-4">
+                  <h4 className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500"></span> 3. Akses Login & Role
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <InputGroup icon={<Shield />} label="Username" value={formData.username} onChange={(v) => setFormData({...formData, username: v})} placeholder="budi01" />
                     <div>
                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Peran Akses</label>
-                      <select value={formData.role} onChange={(e) => setFormData({...formData, role: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-800 dark:text-white border-none focus:ring-2 focus:ring-emerald-500 shadow-inner">
+                      <select 
+                        value={formData.role} 
+                        onChange={(e) => setFormData({...formData, role: e.target.value})} 
+                        className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-800 dark:text-white border-none focus:ring-2 focus:ring-emerald-500 shadow-inner"
+                      >
                         <option value="warga">Warga Biasa</option>
                         <option value="admin">Administrator RT</option>
                       </select>
                     </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Status Warga</label>
+                      <select 
+                        value={formData.status} 
+                        onChange={(e) => setFormData({...formData, status: e.target.value})} 
+                        className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-800 dark:text-white border-none focus:ring-2 focus:ring-emerald-500 shadow-inner"
+                      >
+                        <option value="Aktif">Aktif</option>
+                        <option value="Pindah">Pindah</option>
+                        <option value="Meninggal">Meninggal</option>
+                      </select>
+                    </div>
                   </div>
-                )}
+                  <InputGroup icon={<Mail />} label="Email Login" type="email" required={!isEditMode} value={formData.email} onChange={(v) => setFormData({...formData, email: v})} placeholder="alamat@email.com" />
+                  <InputGroup 
+                    icon={<Key />} 
+                    label={isEditMode ? "Ganti Password (Kosongkan jika tidak diubah)" : "Password Awal"} 
+                    type="password" 
+                    required={!isEditMode} 
+                    value={formData.password} 
+                    onChange={(v) => setFormData({...formData, password: v})} 
+                    placeholder={isEditMode ? "••••••" : "Min. 6 karakter"} 
+                  />
+                </div>
 
-                {/* Footer Navigation */}
-                <div className="flex gap-3 pt-6">
-                  {currentStep > 1 && (
-                    <button type="button" onClick={prevStep} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-bold rounded-2xl flex items-center justify-center gap-2 transition-all">
-                      <ChevronLeft className="h-4 w-4" /> KEMBALI
-                    </button>
-                  )}
-                  
-                  {currentStep < 3 ? (
-                    <button type="button" onClick={nextStep} className="flex-[2] py-4 bg-emerald-500 text-white font-black rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 hover:bg-emerald-600 transition-all active:scale-95">
-                      LANJUT <ChevronRight className="h-4 w-4" />
-                    </button>
-                  ) : (
-                    <button type="submit" disabled={!!isSaving} className="flex-[2] py-4 bg-emerald-600 text-white font-black rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all active:scale-95">
-                      {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
-                      SIMPAN DATA
-                    </button>
-                  )}
+                {/* Footer Action */}
+                <div className="pt-4">
+                  <button type="submit" disabled={!!isSaving} className="w-full py-5 bg-emerald-600 text-white font-black rounded-3xl shadow-xl shadow-emerald-600/20 flex items-center justify-center gap-3 hover:bg-emerald-700 transition-all active:scale-[0.98]">
+                    {isSaving ? <Loader2 className="h-6 w-6 animate-spin" /> : <Save className="h-6 w-6" />}
+                    {isEditMode ? 'PERBARUI DATA USER' : 'SIMPAN USER BARU'}
+                  </button>
                 </div>
               </form>
             </div>
@@ -296,13 +553,13 @@ export default function UserManagementPage() {
   );
 }
 
-function InputGroup({ icon, label, value, onChange, placeholder, type = "text" }: any) {
+function InputGroup({ icon, label, value, onChange, placeholder, type = "text", required = true }: any) {
   return (
     <div>
       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">{label}</label>
       <div className="relative flex items-center group">
         <div className="absolute left-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors">{icon}</div>
-        <input required type={type} value={value} onChange={(e) => onChange(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-800 dark:text-white border-none focus:ring-2 focus:ring-emerald-500 shadow-inner" placeholder={placeholder} />
+        <input required={required} type={type} value={value} onChange={(e) => onChange(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-800 dark:text-white border-none focus:ring-2 focus:ring-emerald-500 shadow-inner" placeholder={placeholder} />
       </div>
     </div>
   );

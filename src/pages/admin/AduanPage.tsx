@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card } from '../../components/ui/Card';
 import { supabase } from '../../lib/supabase';
-import { AlertTriangle, Clock, CheckCircle, Search, MessageSquare, ArrowUpRight, Filter } from 'lucide-react';
+import { AlertTriangle, Clock, CheckCircle, Search, MessageSquare, ArrowUpRight, Filter, Trash2 } from 'lucide-react';
 
 export default function AduanPage() {
   const [complaints, setComplaints] = useState<any[]>([]);
@@ -18,7 +18,7 @@ export default function AduanPage() {
       setLoading(true);
       // Fetch data dasar dulu untuk memastikan sinkronisasi tabel
       const { data, error } = await supabase
-        .from('resident_complaints')
+        .from('complaints')
         .select(`
           *,
           residents (
@@ -46,13 +46,27 @@ export default function AduanPage() {
   const updateStatus = async (id: string, newStatus: string) => {
     try {
       const { error } = await supabase
-        .from('resident_complaints')
+        .from('complaints')
         .update({ status: newStatus })
         .eq('id', id);
       if (error) throw error;
       fetchComplaints();
     } catch (error: any) {
       alert(error.message);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Hapus laporan aduan ini?")) return;
+    try {
+      const { error } = await supabase
+        .from('complaints')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      fetchComplaints();
+    } catch (error: any) {
+      alert("Gagal menghapus: " + error.message);
     }
   };
 
@@ -159,6 +173,13 @@ export default function AduanPage() {
                           </button>
                         )}
                         <button className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400"><ArrowUpRight className="h-4 w-4" /></button>
+                        <button 
+                          onClick={() => handleDelete(item.id)}
+                          className="p-2 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg text-rose-500 transition-colors"
+                          title="Hapus Aduan"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>

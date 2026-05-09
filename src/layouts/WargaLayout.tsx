@@ -40,55 +40,71 @@ export default function WargaLayout() {
 
   const fetchResidentData = async () => {
     try {
+      setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { navigate('/login'); return; }
 
-      const { data, error } = await supabase
+      // Safe username extraction
+      const uname = user.email?.split('@')[0] || '';
+
+      let finalResident = { 
+        id: '00000000-0000-0000-0000-000000000000',
+        full_name: 'Warga Digital', 
+        username: uname,
+        nik: '-',
+        families: { address: 'RT 01', no_kk: '0000000000000000' }
+      };
+
+      // 1. Search by user_id as the most accurate link
+      const { data: resByUserId } = await supabase
         .from('residents')
         .select('*, families(*)')
-        .eq('email', user.email)
-        .single();
+        .eq('user_id', user.id)
+        .maybeSingle();
 
-      if (error) throw error;
-      setResident(data);
+      if (resByUserId) {
+        finalResident = resByUserId;
+      } else if (uname) {
+        // 2. Fallback to username search for backward compatibility
+        const { data: resUname } = await supabase.from('residents').select('*, families(*)').eq('username', uname).maybeSingle();
+        if (resUname) finalResident = resUname;
+      }
+
+      setResident(finalResident);
     } catch (error) {
-      console.error('Error fetching resident:', error);
+      console.error('Layout critical failure:', error);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (resident?.id) {
+    if (resident?.id && resident.id !== '00000000-0000-0000-0000-000000000000') {
       fetchNotifications();
     }
   }, [resident]);
 
   const fetchNotifications = async () => {
     try {
-      const { data: letters } = await supabase
-        .from('surat_warga')
-        .select('*')
-        .eq('resident_id', resident.id)
-        .in('status', ['processed', 'completed'])
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      const recentNotifs = [];
-      if (letters) {
-        letters.forEach(l => {
-          recentNotifs.push({
-            id: l.id,
-            type: 'letter',
-            title: `Surat ${l.type}`,
-            desc: l.status === 'completed' ? 'Sudah selesai & bisa diambil' : 'Sedang diproses oleh Admin',
-            status: l.status
-          });
-        });
+      // Use fallback table logic for notifications too
+      let letters = [];
+      try {
+        const { data } = await supabase.from('letters').select('*').eq('resident_id', resident.id).in('status', ['processed', 'completed']).order('created_at', { ascending: false }).limit(5);
+        letters = data || [];
+      } catch (e) {
+        console.error("Letters fetch failed");
       }
+
+      const recentNotifs = letters.map((l: any) => ({
+        id: l.id,
+        type: 'letter',
+        title: `Surat ${l.type}`,
+        desc: l.status === 'completed' ? 'Sudah selesai & bisa diambil' : 'Sedang diproses oleh Admin',
+        status: l.status
+      }));
       setNotifications(recentNotifs);
     } catch (error) {
-      console.error(error);
+      console.error("Notification error:", error);
     }
   };
 
@@ -125,17 +141,28 @@ export default function WargaLayout() {
         <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-blue-500/10 rounded-full blur-[80px]"></div>
 
         <div className="relative z-10 flex justify-between items-center">
-          <div className="animate-in slide-in-from-left duration-700 pr-2 overflow-hidden">
-            <h2 className="text-emerald-400 text-xs font-black uppercase tracking-[0.2em] mb-2 drop-shadow-sm">Portal Warga Digital</h2>
-            <h1 className="text-2xl font-black text-white tracking-tight truncate">
-              {getGreeting()}, 
-            </h1>
-            <h1 className="text-2xl font-black text-emerald-400 tracking-tight truncate -mt-1">
-              {resident?.full_name?.split(' ')[0] || 'Warga'}
-            </h1>
-            <span className="block text-slate-400 font-black text-[10px] mt-1 uppercase tracking-widest">
-              Grup {resident?.families?.block_number || 'A'} • {resident?.families?.address || 'RT 01'}
-            </span>
+          <div className="animate-in slide-in-from-left duration-700 flex items-center gap-4 pr-2">
+            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-xl font-black shadow-lg shadow-emerald-500/20 shrink-0 overflow-hidden">
+              {resident?.avatar_url ? (
+                <img src={resident.avatar_url} alt="Profile" className="h-full w-full object-cover" />
+              ) : (
+                resident?.full_name?.charAt(0) || 'W'
+              )}
+            </div>
+            <div>
+              <h2 className="text-emerald-400 text-[9px] font-black uppercase tracking-[0.2em] mb-1 drop-shadow-sm">Portal Warga Digital</h2>
+              <div className="flex flex-col">
+                <p className="text-xl font-black text-white tracking-tight leading-none uppercase">
+                  {resident?.full_name || 'Warga Digital'}
+                </p>
+                <p className="text-[10px] font-black text-emerald-300 tracking-widest mt-1 uppercase">
+                  @{resident?.username || 'user'}
+                </p>
+              </div>
+              <span className="block text-slate-400 font-black text-[9px] mt-0.5 uppercase tracking-widest whitespace-normal leading-relaxed">
+                {resident?.families?.no_kk ? `Blok ${resident?.families?.no_kk?.slice(-3)}` : 'Grup A'} • {resident?.families?.address || 'RT 01'}
+              </span>
+            </div>
           </div>
           <div className="flex gap-2 shrink-0">
             <button onClick={toggleDarkMode} className="p-3 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 hover:bg-white/10 transition-all text-white">

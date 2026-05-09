@@ -20,6 +20,12 @@ export default function SuratPage() {
     sender_receiver: ''
   });
 
+  // Modal State for Rejection
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedLetter, setSelectedLetter] = useState<any>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+
   useEffect(() => {
     fetchData();
   }, [activeTab]);
@@ -29,9 +35,10 @@ export default function SuratPage() {
       setLoading(true);
       if (activeTab === 'requests') {
         const { data, error } = await supabase
-          .from('surat_warga')
+          .from('letters')
           .select('*, residents(full_name, nik)')
           .order('created_at', { ascending: false });
+        
         if (error) throw error;
         setRequests(data || []);
       } else {
@@ -67,7 +74,7 @@ export default function SuratPage() {
   };
 
   const handleDeleteArchive = async (id: string) => {
-    if (!confirm("Hapus arsip ini?")) return;
+    if (!window.confirm("Hapus arsip ini?")) return;
     try {
       const { error } = await supabase.from('arsip_surat_rt').delete().eq('id', id);
       if (error) throw error;
@@ -77,17 +84,45 @@ export default function SuratPage() {
     }
   };
 
-  const updateStatus = async (id: string, newStatus: string) => {
+  const handleDeleteRequest = async (id: string) => {
     try {
+      const { error } = await supabase.from('letters').delete().eq('id', id);
+      if (error) throw error;
+      setIsDeleteModalOpen(false);
+      setSelectedLetter(null);
+      fetchData();
+    } catch (error: any) {
+      alert("Gagal menghapus permohonan: " + error.message);
+    }
+  };
+
+  const updateStatus = async (id: string, newStatus: string, reason?: string) => {
+    try {
+      const updateData: any = { status: newStatus };
+      if (reason) updateData.rejection_reason = reason;
+      
       const { error } = await supabase
-        .from('surat_warga')
-        .update({ status: newStatus })
+        .from('letters')
+        .update(updateData)
         .eq('id', id);
       if (error) throw error;
       fetchData();
+      setIsRejectModalOpen(false);
+      setRejectionReason('');
+      setSelectedLetter(null);
     } catch (error: any) {
       alert(error.message);
     }
+  };
+
+  const handleReject = (letter: any) => {
+    setSelectedLetter(letter);
+    setIsRejectModalOpen(true);
+  };
+
+  const openDeleteModal = (letter: any) => {
+    setSelectedLetter(letter);
+    setIsDeleteModalOpen(true);
   };
 
   return (
@@ -95,7 +130,7 @@ export default function SuratPage() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Layanan Surat & Arsip</h2>
-          <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">Sinkronisasi Data Warga & Admin</p>
+          <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">Sinkronisasi Data Warga & Admin </p>
         </div>
         {activeTab === 'archive' && (
           <button 
@@ -184,6 +219,11 @@ export default function SuratPage() {
                       <td className="px-8 py-5 text-xs text-slate-500 font-medium max-w-xs truncate">{req.purpose}</td>
                       <td className="px-8 py-5">
                         <StatusBadge status={req.status} />
+                        {req.status === 'rejected' && req.rejection_reason && (
+                          <p className="text-[10px] text-rose-500 font-bold mt-1.5 max-w-[150px] leading-tight italic">
+                            Alasan: {req.rejection_reason}
+                          </p>
+                        )}
                       </td>
                       <td className="px-8 py-5 text-right">
                         <div className="flex justify-end gap-3">
@@ -196,13 +236,34 @@ export default function SuratPage() {
                             </button>
                           )}
                           {(req.status === 'requested' || req.status === 'processed') && (
-                            <button 
-                              onClick={() => updateStatus(req.id, 'completed')} 
-                              className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all"
-                            >
-                              <CheckCircle className="h-3 w-3" /> SELESAIKAN
-                            </button>
+                            <>
+                              <button 
+                                onClick={() => updateStatus(req.id, 'completed')} 
+                                className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all"
+                              >
+                                <CheckCircle className="h-3 w-3" /> SELESAIKAN
+                              </button>
+                              <button 
+                                onClick={() => handleReject(req)} 
+                                className="flex items-center gap-2 px-3 py-1.5 bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all"
+                              >
+                                <X className="h-3 w-3" /> TOLAK
+                              </button>
+                            </>
                           )}
+                          
+                          {/* Delete Action for Admin override (Human Error) */}
+                          <button 
+                            onClick={() => openDeleteModal(req)}
+                            className={`p-2 rounded-lg transition-colors ${
+                              req.status === 'completed' || req.status === 'rejected' 
+                                ? 'text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10' 
+                                : 'text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10'
+                            }`}
+                            title="Hapus Permohonan"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -311,6 +372,109 @@ export default function SuratPage() {
           </Card>
         </div>
       )}
+      {/* Modal Rejection */}
+      <RejectionModal 
+        isOpen={isRejectModalOpen}
+        onClose={() => setIsRejectModalOpen(false)}
+        onConfirm={updateStatus}
+        reason={rejectionReason}
+        setReason={setRejectionReason}
+        letter={selectedLetter}
+      />
+
+      {/* Modal Delete Confirmation */}
+      <DeleteConfirmationModal 
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setSelectedLetter(null);
+        }}
+        onConfirm={() => handleDeleteRequest(selectedLetter.id)}
+        letter={selectedLetter}
+      />
+    </div>
+  );
+}
+
+function DeleteConfirmationModal({ isOpen, onClose, onConfirm, letter }: any) {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4">
+      <Card className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+        <div className="p-8 text-center space-y-6">
+          <div className="h-20 w-20 bg-rose-50 dark:bg-rose-900/20 rounded-full flex items-center justify-center mx-auto">
+            <Trash2 className="h-10 w-10 text-rose-500" />
+          </div>
+          <div>
+            <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Hapus Permohonan?</h3>
+            <p className="text-xs text-slate-500 font-bold mt-2 leading-relaxed px-4">
+              Anda akan menghapus permohonan surat <span className="text-rose-500 font-black">{letter?.type}</span> milik <span className="text-rose-500 font-black">{letter?.residents?.full_name}</span>. Tindakan ini tidak dapat dibatalkan.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            <button 
+              onClick={onConfirm}
+              className="w-full py-4 bg-rose-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-rose-500/20 hover:bg-rose-600 active:scale-95 transition-all"
+            >
+              YA, HAPUS PERMANEN
+            </button>
+            <button 
+              onClick={onClose}
+              className="w-full py-4 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
+            >
+              BATALKAN
+            </button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function RejectionModal({ isOpen, onClose, onConfirm, reason, setReason, letter }: any) {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4">
+      <Card className="w-full max-w-md bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+        <div className="p-8 border-b dark:border-slate-800 flex justify-between items-center">
+          <div>
+            <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Tolak Permohonan</h3>
+            <p className="text-[10px] text-rose-500 font-bold uppercase tracking-widest mt-0.5">Berikan alasan penolakan surat</p>
+          </div>
+          <button onClick={onClose} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 hover:text-rose-500 transition-colors">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="p-8 space-y-6">
+          <div className="p-4 bg-rose-50 dark:bg-rose-900/20 rounded-2xl border border-rose-100 dark:border-rose-800">
+             <p className="text-xs font-bold text-rose-700 dark:text-rose-400 leading-relaxed">
+               Surat: <span className="font-black uppercase">{letter?.type}</span><br/>
+               Warga: <span className="font-black uppercase">{letter?.residents?.full_name}</span>
+             </p>
+          </div>
+          <div className="space-y-2">
+            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">Alasan Penolakan</label>
+            <textarea 
+              required
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Contoh: Dokumen persyaratan tidak lengkap atau data tidak valid."
+              rows={4}
+              className="w-full p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-900 dark:text-white border-none focus:ring-2 focus:ring-rose-500 placeholder:text-slate-400"
+            />
+          </div>
+          <div className="flex gap-3">
+            <button onClick={onClose} className="flex-1 py-4 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-all">Batal</button>
+            <button 
+              onClick={() => onConfirm(letter.id, 'rejected', reason)} 
+              disabled={!reason}
+              className="flex-2 px-8 py-4 bg-rose-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-rose-500/20 hover:bg-rose-600 active:scale-95 transition-all disabled:opacity-50"
+            >
+              KONFIRMASI TOLAK
+            </button>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
@@ -320,6 +484,7 @@ function StatusBadge({ status }: { status: string }) {
     requested: { label: 'DIAJUKAN', color: 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400' },
     processed: { label: 'DIPROSES', color: 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400' },
     completed: { label: 'SELESAI', color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' },
+    rejected: { label: 'DITOLAK', color: 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400' },
   };
   const config = configs[status] || { label: status, color: 'bg-slate-50 text-slate-600' };
   return <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${config.color}`}>{config.label}</span>;

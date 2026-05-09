@@ -19,11 +19,18 @@ export default function WargaIuranPage() {
   const fetchPayments = async () => {
     try {
       setLoading(true);
+      const famId = resident?.family_id;
+      if (!famId) {
+        setPayments([]);
+        setLoading(false);
+        return;
+      }
+      
       const { data, error } = await supabase
-        .from('dues_payments')
+        .from('payments')
         .select('*')
-        .eq('resident_id', resident.id)
-        .order('payment_date', { ascending: false });
+        .eq('family_id', famId)
+        .order('created_at', { ascending: false });
       if (error) throw error;
       setPayments(data || []);
       
@@ -38,19 +45,17 @@ export default function WargaIuranPage() {
 
   const pendingBills = payments.filter(p => p.status === 'pending');
   const waitingVerification = payments.filter(p => p.status === 'waiting_verification');
-  const successPayments = payments.filter(p => p.status === 'success');
-  const totalOutstanding = pendingBills.reduce((acc, curr) => acc + curr.amount, 0);
+  const successPayments = payments.filter(p => p.status === 'success' || p.status === 'verified');
+  const totalOutstanding = pendingBills.reduce((acc, curr) => acc + (curr.amount_paid || 0), 0);
 
   const handlePay = async () => {
     if (!selectedBill) return;
     setIsPaying(true);
     try {
       const { error } = await supabase
-        .from('dues_payments')
+        .from('payments')
         .update({ 
-          status: 'waiting_verification', // New status for admin verification
-          payment_date: new Date().toISOString(),
-          method: selectedMethod 
+          status: 'waiting_verification'
         })
         .eq('id', selectedBill.id);
       
@@ -79,10 +84,10 @@ export default function WargaIuranPage() {
           <Zap className="absolute -right-4 -top-4 h-32 w-32 text-white/10 rotate-12" />
           <div className="relative z-10 text-center">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-1 opacity-80">
-              {waitingVerification.length > 0 ? 'Sedang Diverifikasi' : 'Total Tagihan Anda'}
+              {waitingVerification.length > 0 ? 'Sedang Diverifikasi' : selectedBill ? 'Jumlah yang akan dibayar' : 'Total Tagihan Anda'}
             </p>
             <h3 className="text-5xl font-black tracking-tighter">
-              Rp {totalOutstanding.toLocaleString('id-ID')}
+              Rp {(selectedBill ? selectedBill.amount_paid : totalOutstanding).toLocaleString('id-ID')}
             </h3>
             <div className="flex items-center gap-2 mt-4 mx-auto bg-white/20 w-fit px-4 py-2 rounded-full backdrop-blur-md">
               {waitingVerification.length > 0 ? (
@@ -118,9 +123,9 @@ export default function WargaIuranPage() {
                     >
                       <div className="flex items-center gap-3">
                         <Calendar className={`h-5 w-5 ${selectedBill?.id === bill.id ? 'text-emerald-500' : 'text-slate-300'}`} />
-                        <span className={`text-sm font-black uppercase ${selectedBill?.id === bill.id ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500'}`}>{bill.month}</span>
+                        <span className={`text-sm font-black uppercase ${selectedBill?.id === bill.id ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500'}`}>{bill.title || 'IURAN BULANAN'}</span>
                       </div>
-                      <span className="text-xs font-black text-slate-700 dark:text-slate-300">Rp {bill.amount.toLocaleString('id-ID')}</span>
+                      <span className="text-xs font-black text-slate-700 dark:text-slate-300">Rp {(bill.amount_paid || 0).toLocaleString('id-ID')}</span>
                     </button>
                   ))}
                 </div>
@@ -158,9 +163,10 @@ export default function WargaIuranPage() {
                   disabled={isPaying || !selectedBill}
                   className={`w-full py-5 text-white rounded-[2rem] font-black shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all ${selectedMethod === 'Transfer Bank' ? 'bg-blue-500 shadow-blue-500/30' : 'bg-emerald-500 shadow-emerald-500/30'}`}
                 >
-                  {isPaying ? <Loader2 className="h-6 w-6 animate-spin" /> : <Clock className="h-6 w-6" />}
-                  KONFIRMASI PEMBAYARAN
+                  {isPaying ? <Loader2 className="h-6 w-6 animate-spin" /> : <CreditCard className="h-6 w-6" />}
+                  BAYAR SEKARANG (Rp {selectedBill?.amount_paid?.toLocaleString('id-ID')})
                 </button>
+                <p className="text-[10px] text-center text-slate-400 font-bold uppercase tracking-widest">Sistem Cicil Aktif: Pilih tagihan lain untuk mencicil</p>
               </div>
             </>
           ) : waitingVerification.length > 0 ? (
@@ -200,14 +206,14 @@ export default function WargaIuranPage() {
                   {p.status === 'waiting_verification' ? <Timer className="h-6 w-6" /> : <CheckCircle className="h-6 w-6" />}
                 </div>
                 <div>
-                  <h4 className="font-black text-slate-800 dark:text-white text-sm">{p.month}</h4>
+                  <h4 className="font-black text-slate-800 dark:text-white text-sm">{p.title || 'IURAN BULANAN'}</h4>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    {p.method} • {new Date(p.payment_date).toLocaleDateString('id-ID')} {new Date(p.payment_date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                    {p.method || 'Digital'} • {new Date(p.created_at).toLocaleDateString('id-ID')} {new Date(p.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="font-black text-slate-800 dark:text-white text-sm">Rp {p.amount?.toLocaleString('id-ID')}</p>
+                <p className="font-black text-slate-800 dark:text-white text-sm">Rp {(p.amount_paid || 0).toLocaleString('id-ID')}</p>
                 <span className={`text-[9px] font-black uppercase ${p.status === 'waiting_verification' ? 'text-amber-500' : 'text-emerald-500'}`}>
                   {p.status === 'waiting_verification' ? 'DIVERIFIKASI' : 'SUKSES'}
                 </span>

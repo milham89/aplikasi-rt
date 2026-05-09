@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, FileText, Activity, CreditCard, ArrowUpRight, ArrowDownRight, Clock } from 'lucide-react';
+import { Users, FileText, Activity, CreditCard, ArrowUpRight, ArrowDownRight, Clock, AlertTriangle } from 'lucide-react';
 import { Card, CardContent } from '../../components/ui/Card';
 import { supabase } from '../../lib/supabase';
 
@@ -7,6 +7,8 @@ export default function DashboardPage() {
   const [totalWarga, setTotalWarga] = useState(0);
   const [suratMenunggu, setSuratMenunggu] = useState(0);
   const [aduanAktif, setAduanAktif] = useState(0);
+  const [unpaidDues, setUnpaidDues] = useState(0);
+  const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -16,29 +18,49 @@ export default function DashboardPage() {
   const fetchStats = async () => {
     setLoading(true);
     try {
-      // Fetch Total Warga
-      const { count: wargaCount } = await supabase
-        .from('residents')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'Aktif');
-      
-      // Fetch Surat Menunggu
-      const { count: suratCount } = await supabase
-        .from('letters')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'requested');
+      // 1. Fetch Basic Counts (Defensive)
+      const [wargaRes, suratRes, aduanRes, iuranRes] = await Promise.all([
+        supabase.from('residents').select('id', { count: 'exact', head: true }),
+        supabase.from('letters').select('id', { count: 'exact', head: true }).neq('status', 'completed'),
+        supabase.from('complaints').select('id', { count: 'exact', head: true }).neq('status', 'resolved'),
+        supabase.from('payments').select('id', { count: 'exact', head: true }).neq('status', 'verified')
+      ]);
 
-      // Fetch Aduan Aktif
-      const { count: aduanCount } = await supabase
-        .from('complaints')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'open');
+      setTotalWarga(wargaRes.count || 0);
+      setSuratMenunggu(suratRes.count || 0);
+      setAduanAktif(aduanRes.count || 0);
+      setUnpaidDues(iuranRes.count || 0);
 
-      setTotalWarga(wargaCount || 0);
-      setSuratMenunggu(suratCount || 0);
-      setAduanAktif(aduanCount || 0);
+      // 2. Fetch Recent Activities (Standardized & Defensive)
+      // We'll fetch them separately to avoid one failure blocking everything
+      const activitiesList: any[] = [];
+
+      try {
+        const { data: s } = await supabase.from('letters').select('id, type, created_at, residents(full_name)').order('created_at', { ascending: false }).limit(5);
+        if (s) s.forEach(x => activitiesList.push({
+          id: x.id, type: 'SURAT', title: x.type, user: x.residents?.full_name || 'Warga', date: x.created_at, icon: <FileText className="h-4 w-4 text-blue-500" />, color: 'bg-blue-50'
+        }));
+      } catch (e) { console.warn("Letters fetch failed"); }
+
+      try {
+        const { data: a } = await supabase.from('complaints').select('id, title, created_at, residents(full_name)').order('created_at', { ascending: false }).limit(5);
+        if (a) a.forEach(x => activitiesList.push({
+          id: x.id, type: 'ADUAN', title: x.title, user: x.residents?.full_name || 'Warga', date: x.created_at, icon: <AlertTriangle className="h-4 w-4 text-rose-500" />, color: 'bg-rose-50'
+        }));
+      } catch (e) { console.warn("Complaints fetch failed"); }
+
+      try {
+        // For payments, we join families then residents (if possible) or just show Payment
+        const { data: p } = await supabase.from('payments').select('id, amount_paid, created_at, status').order('created_at', { ascending: false }).limit(5);
+        if (p) p.forEach(x => activitiesList.push({
+          id: x.id, type: 'IURAN', title: `Pembayaran Rp${(x.amount_paid || 0).toLocaleString()}`, user: 'Warga', date: x.created_at, icon: <CreditCard className="h-4 w-4 text-emerald-500" />, color: 'bg-emerald-50'
+        }));
+      } catch (e) { console.warn("Payments fetch failed"); }
+
+      setActivities(activitiesList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 8));
+
     } catch (error) {
-      console.error('Error fetching dashboard stats:', error);
+      console.error('Dashboard critical error:', error);
     } finally {
       setLoading(false);
     }
@@ -105,8 +127,8 @@ export default function DashboardPage() {
             </div>
             <p className="text-slate-500 text-sm font-medium mb-1">Iuran Belum Lunas</p>
             <div className="flex items-end gap-2">
-              <h3 className="text-3xl font-bold text-slate-800">0</h3>
-              <p className="text-sm font-medium text-slate-400 mb-1">Keluarga</p>
+              <h3 className="text-3xl font-bold text-slate-800">{loading ? '...' : unpaidDues}</h3>
+              <p className="text-sm font-medium text-slate-400 mb-1">Transaksi</p>
             </div>
           </CardContent>
         </Card>
@@ -116,14 +138,43 @@ export default function DashboardPage() {
       <div className="mt-8">
         <div className="flex justify-between items-end mb-6">
           <div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">Aktivitas Terkini</h3>
-            <p className="text-sm text-slate-500">Log aktivitas warga dalam 24 jam terakhir.</p>
+            <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">Aktivitas Terkini</h3>
+            <p className="text-[10px] text-slate-500 font-black uppercase mt-1 tracking-widest">Log aktivitas warga terbaru dari database</p>
           </div>
         </div>
         
-        <Card className="border border-slate-200 shadow-sm overflow-hidden p-8 text-center">
-            <p className="text-slate-500">Belum ada aktivitas terekam di database.</p>
-        </Card>
+        {loading ? (
+          <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-[2.5rem] border-none shadow-sm">
+            <Clock className="h-8 w-8 animate-spin mx-auto text-slate-300 mb-4" />
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Sinkronisasi Aktivitas...</p>
+          </div>
+        ) : activities.length === 0 ? (
+          <Card className="border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden p-12 text-center rounded-[2.5rem] bg-white dark:bg-slate-900">
+            <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Belum ada aktivitas terekam</p>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {activities.map((act) => (
+              <Card key={`${act.type}-${act.id}`} className="border-none shadow-sm bg-white dark:bg-slate-900 rounded-[2rem] overflow-hidden hover:shadow-md transition-all group">
+                <CardContent className="p-5 flex items-center gap-5">
+                  <div className={`h-12 w-12 ${act.color} rounded-2xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform`}>
+                    {act.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-start">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{act?.type || 'AKTIVITAS'}</span>
+                      <span className="text-[9px] font-black text-slate-400 uppercase">
+                        {act?.date ? new Date(act.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }) : '-'} • {act?.date ? new Date(act.date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                      </span>
+                    </div>
+                    <h4 className="font-bold text-slate-800 dark:text-white text-sm truncate">{act?.title || 'Tanpa Judul'}</h4>
+                    <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mt-0.5">{act?.user || 'Warga'}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

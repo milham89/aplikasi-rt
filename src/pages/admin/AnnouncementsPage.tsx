@@ -67,6 +67,19 @@ export default function AnnouncementsPage() {
     }
   };
 
+  const togglePin = async (id: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('announcements')
+        .update({ is_pinned: !currentStatus })
+        .eq('id', id);
+      if (error) throw error;
+      fetchAnnouncements();
+    } catch (error: any) {
+      alert("Gagal mengubah status semat: " + error.message);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
@@ -99,8 +112,20 @@ export default function AnnouncementsPage() {
                     <Megaphone className="h-6 w-6" />
                   </div>
                   <div className="flex gap-2">
-                    {item.is_pinned && <Pin className="h-4 w-4 text-emerald-500 fill-emerald-500" />}
-                    <button onClick={() => handleDelete(item.id)} className="text-slate-300 hover:text-rose-500 transition-colors"><Trash2 className="h-4 w-4" /></button>
+                    <button 
+                      onClick={() => togglePin(item.id, item.is_pinned)} 
+                      className={`p-2 rounded-xl transition-all ${item.is_pinned ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' : 'bg-slate-50 dark:bg-slate-800 text-slate-300 hover:text-emerald-500'}`}
+                      title={item.is_pinned ? "Lepas Pin" : "Sematkan"}
+                    >
+                      <Pin className={`h-4 w-4 ${item.is_pinned ? 'fill-current' : ''}`} />
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(item.id)} 
+                      className="p-2 bg-slate-50 dark:bg-slate-800 text-slate-300 hover:text-rose-500 rounded-xl transition-all"
+                      title="Hapus"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
                 <div>

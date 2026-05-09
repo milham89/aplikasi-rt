@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent } from '../../components/ui/Card';
-import { CreditCard, TrendingUp, Users, Clock, CheckCircle, Search, Filter, Download, ArrowUpRight, X, Save, Loader2, User } from 'lucide-react';
+import { CreditCard, TrendingUp, Users, Clock, CheckCircle, Search, Filter, Download, ArrowUpRight, X, Save, Loader2, User, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 export default function KeuanganPage() {
   const [payments, setPayments] = useState<any[]>([]);
   const [residents, setResidents] = useState<any[]>([]);
+  const [dues, setDues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -14,8 +15,9 @@ export default function KeuanganPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [newBill, setNewBill] = useState({
     resident_id: '',
+    title: '',
     month: 'Juni 2024',
-    amount: 50000,
+    amount: 0,
   });
 
   useEffect(() => {
@@ -25,21 +27,25 @@ export default function KeuanganPage() {
   const fetchAllData = async () => {
     try {
       setLoading(true);
-      // Fetch payments
+      // Fetch payments (Try new table first)
       const { data: pData, error: pError } = await supabase
-        .from('dues_payments')
-        .select('*, residents(full_name, nik)')
-        .order('payment_date', { ascending: false });
+        .from('payments')
+        .select('*, families(no_kk, address)')
+        .order('created_at', { ascending: false });
       if (pError) throw pError;
       setPayments(pData || []);
 
       // Fetch residents for dropdown
       const { data: rData, error: rError } = await supabase
         .from('residents')
-        .select('id, full_name, nik')
+        .select('id, full_name, nik, family_id')
         .order('full_name');
       if (rError) throw rError;
       setResidents(rData || []);
+
+      // Fetch dues for categories
+      const { data: dData } = await supabase.from('dues').select('*');
+      setDues(dData || []);
     } catch (error) {
       console.error(error);
     } finally {
@@ -53,12 +59,14 @@ export default function KeuanganPage() {
     
     setIsSaving(true);
     try {
-      const { error } = await supabase.from('dues_payments').insert([{
-        resident_id: newBill.resident_id,
-        month: newBill.month,
-        amount: newBill.amount,
+      const selectedResident = residents.find(r => r.id === newBill.resident_id);
+      if (!selectedResident?.family_id) throw new Error("Warga ini belum terhubung ke data Keluarga (KK).");
+
+      const { error } = await supabase.from('payments').insert([{
+        family_id: selectedResident.family_id,
+        title: newBill.title,
+        amount_paid: newBill.amount,
         status: 'pending',
-        method: 'Tagihan Admin'
       }]);
       if (error) throw error;
       alert("Tagihan iuran berhasil dibuat!");
@@ -74,7 +82,7 @@ export default function KeuanganPage() {
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     try {
       const { error } = await supabase
-        .from('dues_payments')
+        .from('payments')
         .update({ status: newStatus })
         .eq('id', id);
       if (error) throw error;
@@ -84,10 +92,21 @@ export default function KeuanganPage() {
     }
   };
 
-  const totalIncome = payments.reduce((acc, curr) => acc + (curr.status === 'success' ? curr.amount : 0), 0);
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Hapus data transaksi ini?")) return;
+    try {
+      const { error } = await supabase.from('payments').delete().eq('id', id);
+      if (error) throw error;
+      fetchAllData();
+    } catch (error: any) {
+      alert("Gagal menghapus: " + error.message);
+    }
+  };
+
+  const totalIncome = payments.reduce((acc, curr) => acc + (curr.status === 'success' || curr.status === 'verified' ? (curr.amount_paid || 0) : 0), 0);
   const filteredPayments = payments.filter(p => 
-    p.residents?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.month?.toLowerCase().includes(searchTerm.toLowerCase())
+    p.families?.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.families?.no_kk?.includes(searchTerm)
   );
 
   return (
@@ -146,18 +165,18 @@ export default function KeuanganPage() {
                   <tr key={payment.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                     <td className="px-8 py-5">
                       <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                        {new Date(payment.payment_date).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                        {new Date(payment.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                       </p>
                       <p className="text-[10px] text-slate-400 font-black uppercase tracking-tighter">
-                        Pukul {new Date(payment.payment_date).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+                        Pukul {new Date(payment.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
                       </p>
                     </td>
                     <td className="px-8 py-5">
-                      <p className="text-sm font-black text-slate-900 dark:text-white uppercase">{payment.residents?.full_name}</p>
-                      <p className="text-[10px] text-slate-400 font-bold">NIK: {payment.residents?.nik}</p>
+                      <p className="text-sm font-black text-slate-900 dark:text-white uppercase">Keluarga No. KK {payment.families?.no_kk?.slice(-6)}</p>
+                      <p className="text-[10px] text-slate-400 font-bold">{payment.families?.address || 'RT 01'}</p>
                     </td>
-                    <td className="px-8 py-5 text-sm font-bold text-slate-600 uppercase">{payment.month}</td>
-                    <td className="px-8 py-5 font-black text-emerald-600 text-sm">Rp {payment.amount?.toLocaleString('id-ID')}</td>
+                    <td className="px-8 py-5 text-sm font-bold text-slate-600 uppercase">{payment.title || 'IURAN BULANAN'}</td>
+                    <td className="px-8 py-5 font-black text-emerald-600 text-sm">Rp {(payment.amount_paid || 0).toLocaleString('id-ID')}</td>
                     <td className="px-8 py-5">
                       <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${
                         payment.status === 'success' ? 'bg-emerald-50 text-emerald-600' : 
@@ -189,6 +208,13 @@ export default function KeuanganPage() {
                           </>
                         )}
                         <button className="p-2 text-slate-400"><ArrowUpRight className="h-4 w-4" /></button>
+                        <button 
+                          onClick={() => handleDelete(payment.id)}
+                          className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-all"
+                          title="Hapus Transaksi"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -226,6 +252,21 @@ export default function KeuanganPage() {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Keterangan / Jenis Pembayaran</label>
+                <div className="relative">
+                  <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-300" />
+                  <input 
+                    required
+                    type="text"
+                    value={newBill.title}
+                    onChange={(e) => setNewBill({...newBill, title: e.target.value})}
+                    placeholder="Contoh: Iuran Keamanan, Sampah, dll"
+                    className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-900 dark:text-white border-none focus:ring-2 focus:ring-emerald-500 shadow-inner"
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Periode Bulan</label>
@@ -233,7 +274,16 @@ export default function KeuanganPage() {
                 </div>
                 <div>
                   <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Nominal (Rp)</label>
-                  <input type="number" value={newBill.amount} onChange={(e) => setNewBill({...newBill, amount: parseInt(e.target.value)})} className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-900 dark:text-white border-none focus:ring-2 focus:ring-emerald-500" />
+                  <input 
+                    type="text" 
+                    value={newBill.amount === 0 ? '' : newBill.amount.toLocaleString('id-ID')} 
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      setNewBill({...newBill, amount: parseInt(val) || 0});
+                    }} 
+                    className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 rounded-2xl text-sm font-bold text-slate-900 dark:text-white border-none focus:ring-2 focus:ring-emerald-500" 
+                    placeholder="50.000"
+                  />
                 </div>
               </div>
 

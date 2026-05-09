@@ -109,7 +109,7 @@ export default function WargaPage() {
           family_id: familyId,
           nik: formData.nik,
           full_name: formData.full_name,
-          gender: formData.gender,
+          gender: formData.gender === 'Laki-laki' ? 'L' : 'P',
           phone_number: formData.phone_number,
           role: formData.role,
           status: formData.status,
